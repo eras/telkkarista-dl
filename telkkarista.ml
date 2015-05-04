@@ -152,16 +152,26 @@ let default_prompt =
   Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_opts_t)),
   Term.info program_name ~version ~sdocs:"COMMON OPTIONS" ~doc ~man
 
-let cmd_checkSession env = 
+let cmd_checkSession env =
+  let doc = "Check session status" in
   Term.(pure (checkSession env) $ common_opts_t),
-  Term.info "checkSession" ~version
+  Term.info "checkSession" ~version ~doc
 
-let cmd_login env = 
+let cmd_login env =
+  let doc = "Log into the service" in
   Term.(pure (login env) $ common_opts_t $ username_t $ password_t),
-  Term.info "login" ~version
+  Term.info "login" ~version ~doc
 
 let main () =
-  match Term.eval_choice default_prompt [cmd_checkSession (); cmd_login ()] with `Error _ -> exit 1 | _ -> exit 0
+  let subcommands = [
+    cmd_checkSession;
+    cmd_login;
+  ] in
+  let env = () in
+  match Term.eval_choice default_prompt (List.map (fun x -> x env) subcommands)
+  with
+  | `Error _ -> exit 1
+  | _        -> exit 0
 
 let _ =
   if not !(Sys.interactive) then
