@@ -138,12 +138,12 @@ let common_opts_t env =
   Term.(pure (common_opts env) $ session)
 
 let username_t =
-  let doc = "User name (email)" in
-  Arg.(value & opt string "" & info ["u"; "user"] ~doc)
+  let doc = "User name (email). This is required." in
+  Arg.(required & opt (some string) None & info ["u"; "user"] ~doc)
 
 let password_t =
-  let doc = "Password" in
-  Arg.(value & opt string "" & info ["p"; "pass"] ~doc)
+  let doc = "Password. This is required." in
+  Arg.(required & opt (some string) None & info ["p"; "pass"] ~doc)
 
 let help_subcommands = [
   `S "COMMON OPTIONS";
