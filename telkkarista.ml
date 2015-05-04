@@ -48,18 +48,20 @@ struct
   let checkSession = endpoint "1/user/checkSession"
 end
 
+let session_header session = ["X-SESSION", session]
+
 let post ~headers ~endpoint ~body =
   let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
   return (Yojson.Safe.from_string body_string)
 
-let post_with_session ~session ~endpoint ~body = post ~headers:["X-SESSION", session] ~endpoint ~body
+let post_with_session ~session ~endpoint ~body = post ~headers:(session_header session) ~endpoint ~body
 
 let post_without_session ~endpoint ~body = post ~headers:[] ~endpoint ~body
 
 let get ~session ~endpoint =
-  let headers = Cohttp.Header.of_list ["X-SESSION", session] in
+  let headers = Cohttp.Header.of_list (session_header session) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
   Printf.printf "Response: %s\n%!" body_string;
