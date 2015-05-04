@@ -69,6 +69,21 @@ let get ~session ~endpoint =
   Printf.printf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
     
+let request endpoint request from_json common respond =
+  let%lwt response =
+    match request with
+    | None -> get ~session:common.c_session ~endpoint
+    | Some json ->
+      let body = Yojson.Safe.to_string json in
+      post_with_session ~session:common.c_session ~endpoint ~body
+  in
+  match API.response_of_yojson from_json response with
+  | `Error error ->
+    Printf.printf "Failed to convert response from %s: %s\n%!" (Yojson.Safe.to_string response) error;
+    respond None
+  | `Ok response ->
+    respond (Some response) 
+
 let checkSession env common =
   Lwt_unix.run (
     (* ~body:(`Stream (Lwt_stream.of_list ["foo"])) *)
@@ -82,6 +97,11 @@ let checkSession env common =
       Printf.printf "id: %s\n%!" response.API.payload._id;
       return (Some response);
       return ()
+  )
+
+let checkSession' env common =
+  Lwt_unix.run (
+    request Endpoints.checkSession None API.checkSession_response_of_yojson common (fun _ -> return ())
   )
 
 let login env common email password =
