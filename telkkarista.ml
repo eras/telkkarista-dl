@@ -145,7 +145,7 @@ let help_subcommands = [
   `S "BUGS"; `P "Check bug reports at http://bugs.example.org.";]
 
 let default_prompt = 
-  let doc = "A standalone command line client for Telkkarista.com" in 
+  let doc = "An unofficial standalone command line client for Telkkarista.com" in 
   let man = help_subcommands in
   Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_opts_t)),
   Term.info program_name ~version ~sdocs:"COMMON OPTIONS" ~doc ~man
