@@ -41,11 +41,13 @@ end
 
 module Endpoints =
 struct
-  let endpoint service = Uri.of_string (base /^ service)
+  let version = 1
+  
+  let endpoint service = Uri.of_string (base /^ Printf.sprintf "%d" version /^ service)
 
-  let login = endpoint "1/user/login"
+  let login = endpoint "user/login"
       
-  let checkSession = endpoint "1/user/checkSession"
+  let checkSession = endpoint "user/checkSession"
 end
 
 let session_header session = ["X-SESSION", session]
