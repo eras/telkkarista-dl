@@ -1,0 +1,7 @@
+PKG lwt.ppx
+PKG lwt
+PKG cohttp.lwt
+PKG cmdliner
+PKG yojson
+FLG -w -40
+

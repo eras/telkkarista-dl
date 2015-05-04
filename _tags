@@ -1,0 +1,1 @@
+<*>: package(cohttp.lwt), package(cmdliner), package(ppx_deriving_yojson), package(yojson), package(lwt.ppx), package(lwt), warn(-40)
