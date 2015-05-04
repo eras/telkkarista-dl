@@ -18,8 +18,8 @@ struct
   type 'a response = {
     status       : string;
     code         : string;
-    payload      : 'a;
-  } [@@deriving of_yojson]
+    payload      : 'a option [@default None];
+  } [@@deriving of_yojson { strict = false }]
 
   type checkSession_response = {
     _id          : string;
@@ -93,8 +93,11 @@ let checkSession env common =
       Printf.printf "Failed to extract json: %s\n%!" error;
       return None;
       return ()
-    | `Ok response ->
-      Printf.printf "id: %s\n%!" response.API.payload._id;
+    | `Ok { payload = None } ->
+      Printf.printf "There was an error in the response: %s\n%!" (Yojson.Safe.to_string response);
+      return ()
+    | `Ok { payload = Some response } ->
+      Printf.printf "id: %s\n%!" response.API._id;
       return (Some response);
       return ()
   )
@@ -113,9 +116,12 @@ let login env common email password =
       Printf.printf "Failed to extract json: %s\n%!" error;
       return None;
       return ()
-    | `Ok response ->
-      Printf.printf "token: %s\n%!" response.API.payload;
-      return (Some response);
+    | `Ok { payload = None } ->
+      Printf.printf "Failed to retrieve token: %s\n%!" (Yojson.Safe.to_string response);
+      return ()
+    | `Ok { payload = Some token } ->
+      Printf.printf "token: %s\n%!" token;
+      return (Some token);
       return ()
   )
 
