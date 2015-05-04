@@ -48,27 +48,28 @@ struct
   let checkSession = endpoint "1/user/checkSession"
 end
 
-let post ~session ~endpoint ~body =
-  let headers = Cohttp.Header.of_list ["X-SESSION", session] in
-  let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body ~headers endpoint in
-  Cohttp_lwt_body.to_string body
-
-let post_without_session ~endpoint ~body =
-  let headers = Cohttp.Header.of_list ["Content-Length", Printf.sprintf "%d" (String.length body)] in
+let post ~headers ~endpoint ~body =
+  let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
-  Cohttp_lwt_body.to_string body
+  let%lwt body_string = Cohttp_lwt_body.to_string body in
+  return (Yojson.Safe.from_string body_string)
+
+let post_with_session ~session ~endpoint ~body = post ~headers:["X-SESSION", session] ~endpoint ~body
+
+let post_without_session ~endpoint ~body = post ~headers:[] ~endpoint ~body
 
 let get ~session ~endpoint =
   let headers = Cohttp.Header.of_list ["X-SESSION", session] in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
-  Cohttp_lwt_body.to_string body
+  let%lwt body_string = Cohttp_lwt_body.to_string body in
+  Printf.printf "Response: %s\n%!" body_string;
+  return (Yojson.Safe.from_string body_string)
     
 let checkSession env common =
   Lwt_unix.run (
     (* ~body:(`Stream (Lwt_stream.of_list ["foo"])) *)
     let%lwt response = get ~session:common.c_session ~endpoint:Endpoints.checkSession in
-    Printf.printf "Response: %s\n%!" response;
-    match API.response_of_yojson API.checkSession_response_of_yojson (Yojson.Safe.from_string response) with
+    match API.response_of_yojson API.checkSession_response_of_yojson response with
     | `Error error ->
       Printf.printf "Failed to extract json: %s\n%!" error;
       return None;
@@ -83,7 +84,7 @@ let login env common email password =
   Lwt_unix.run (
     let body = Yojson.Safe.to_string @@ API.login_request_to_yojson { API.email; password } in
     let%lwt response = post_without_session ~endpoint:Endpoints.login ~body in
-    match API.response_of_yojson API.login_response_of_yojson (Yojson.Safe.from_string response) with
+    match API.response_of_yojson API.login_response_of_yojson response with
     | `Error error ->
       Printf.printf "Failed to extract json: %s\n%!" error;
       return None;
