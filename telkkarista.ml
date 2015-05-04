@@ -141,9 +141,7 @@ let help_subcommands = [
   `S "COMMON OPTIONS";
   `P "These options are common to all commands.";
   `S "MORE HELP";
-  `P "Use `$(mname) $(i,COMMAND) --help' for help on a single command.";`Noblank;
-  `P "Use `$(mname) help patterns' for help on patch matching."; `Noblank;
-  `P "Use `$(mname) help environment' for help on environment variables.";
+  `P "Use `$(mname) $(i,COMMAND) --help' for help on a single command.";
   `S "BUGS"; `P "Check bug reports at http://bugs.example.org.";]
 
 let default_prompt = 
