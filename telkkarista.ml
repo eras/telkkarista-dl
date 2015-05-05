@@ -93,8 +93,8 @@ struct
   (* let's consider this a special case for how *)
   let login_uri = endpoint_uri "user/login"
 
-  let lwt f a b =
-    let LwtResult lwt = f a b in
+  let lwt f session argument =
+    let LwtResult lwt = f session argument in
     lwt    
 
   let login_request =
