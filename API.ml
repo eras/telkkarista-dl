@@ -25,9 +25,11 @@ type session_token = string [@@deriving of_yojson]
 (* "code"       : "login_ok" *)
 type login_response = session_token [@@deriving of_yojson]
 
+type timestamp = string [@@deriving yojson]
+
 type range_request = {
-  begin_ [@key "begin"] : string;
-  end_ [@key "end"]     : string;
+  begin_ [@key "begin"] : timestamp;
+  end_ [@key "end"]     : timestamp;
 } [@@deriving to_yojson]
 
 type quality = string [@@deriving of_yojson]
@@ -45,8 +47,8 @@ type title = {
 type pid = string [@@deriving of_yojson]
 
 type vod = {
-  start         : string;
-  stop          : string; (* "2015-04-30T21:30:00.000Z" *)
+  start         : timestamp;
+  stop          : timestamp; (* "2015-04-30T21:30:00.000Z" *)
   title         : title;
   record        : string;
   storageServer : string;
