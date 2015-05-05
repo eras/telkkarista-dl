@@ -40,8 +40,8 @@ struct
   type login_response = string [@@deriving of_yojson]
 
   type range_request = {
-    t0 [@key "begin"] : string;
-    t1 [@key "end"]   : string;
+    begin_ [@key "begin"] : string;
+    end_ [@key "end"]     : string;
   } [@@deriving to_yojson]
 
   type quality = string [@@deriving of_yojson]
@@ -92,6 +92,8 @@ struct
   let login = endpoint "user/login"
       
   let checkSession = endpoint "user/checkSession"
+
+  let range = endpoint "epg/range"
 end
 
 let session_header session = ["X-SESSION", session]
@@ -149,6 +151,11 @@ let checkSession common =
 let checkSession' common =
   Lwt_unix.run (
     request Endpoints.checkSession None API.checkSession_response_of_yojson common (fun _ -> return ())
+  )
+
+let range common begin_ end_ =
+  Lwt_unix.run (
+    request Endpoints.range (Some (API.range_request_to_yojson { API.begin_; end_ })) API.range_response_of_yojson common (fun _ -> return ())
   )
 
 let login common email password =
