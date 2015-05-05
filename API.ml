@@ -1,3 +1,5 @@
+open Batteries
+
 type 'a response = {
   status        : string;
   code          : string;
@@ -57,9 +59,31 @@ type range_single_response = (channel * programs)
 
 type range_response = range_single_response list
 
+let partition_map p xs =
+  let rec loop xs left right =
+    match xs with
+    | [] -> (List.rev left, List.rev right)
+    | x::xs ->
+      match p x with
+      | `Left x -> loop xs (x::left) (right)
+      | `Right x -> loop xs (left) (x::right)
+  in
+  loop xs [] []
+
 let assoc_of_yojson f error (json : Yojson.Safe.json) =
   match json with
-  | `Assoc assoc -> `Ok (List.map (fun (k, v) -> (k, f v)) assoc)
+  | `Assoc assoc ->
+    ( let results = List.map (fun (k, v) -> (k, f v)) assoc in
+      let ok, errors =
+        partition_map (
+          function
+          | (key, `Ok value) -> `Left (key, value)
+          | (key, `Error error) -> `Right error)
+          results
+      in
+      match errors with
+      | [] -> `Ok ok
+      | errors -> `Error (String.concat " & " errors) )
   | _ -> `Error error
 
 let range_response_of_yojson = assoc_of_yojson programs_of_yojson "Invalid JSON for range response"
