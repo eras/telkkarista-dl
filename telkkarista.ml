@@ -12,34 +12,45 @@ let (/^) a b = a ^ "/" ^ b
 type environment = [`Environment] (* temporary *)
 
 type common = {
-  c_session : string;
-  c_env     : environment;
+  c_session : API.session_token; (* session id is kept here *)
+  c_env     : environment;       (* auxiliary environment data (ie. loaded configuration, location of configuration) *)
 }
 
+(* Converting JSON to proper data types uses this type *)
 type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 
-(* This makes 'a Lwt.t non-abstract *)
+(* This makes 'a Lwt.t non-abstract for the purposes of GADT *)
 type 'a lwt_result = LwtResult of 'a Lwt.t
 
 type ('session, 'a, 'b) result = ('session -> 'a -> 'b option lwt_result)
 
 type _ request =
+  (* GetRequest has no parameters, but does have a response, ie. checkSession *)
   | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (API.session_token, unit, 'b) result request
+
+  (* PostRequestNoSession has parameters and response, but does not use session identifier, ie. login *)
   | PostRequestNoSession: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (unit, 'a, 'b) result request
+
+  (* PostRequest is the typically used request with both input and output and session identifier *)
   | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (API.session_token, 'a, 'b) result request
 
+(* Each request has this header (except PostRequestNoSession) *)
 let session_header session = ["X-SESSION", session]
 
+(* TODO: remove *)
 let post ~headers ~endpoint ~body =
   let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
   return (Yojson.Safe.from_string body_string)
 
+(* TODO: remove *)
 let post_with_session ~session ~endpoint ~body = post ~headers:(session_header session) ~endpoint ~body
 
+(* TODO: remove *)
 let post_without_session ~endpoint ~body = post ~headers:[] ~endpoint ~body
 
+(* TODO: remove *)
 let get ~session ~endpoint =
   let headers = Cohttp.Header.of_list (session_header session) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
@@ -47,6 +58,7 @@ let get ~session ~endpoint =
   Printf.printf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
     
+(* TODO: remove *)
 let request endpoint request from_json common respond =
   let%lwt response =
     match request with
@@ -62,21 +74,31 @@ let request endpoint request from_json common respond =
   | `Ok response ->
     respond (Some response) 
 
+(* API end points with type safe interfaces *)
 module Endpoints =
 struct
   let version = 1
   
   let endpoint_uri service = Uri.of_string (base /^ Printf.sprintf "%d" version /^ service)
 
+  (* Construct a request object for the given resource. The return
+     type [req] results in two more arguments: the session id (or ()
+     if no session as with PostRequestNoSession) and data argument (or
+     () if no data argument as with GetRequest). The return type will
+     be packaged to LwtResult due to GADT reasons; use [lwt] to
+     unpackage it. *)
   let request (type req) (type session) uri (request : req request) : req =
     let handle_response json_to_response response =
       match API.response_of_yojson json_to_response response with
+      (* We failed to decode then JSON; TODO: better error handling *)
       | `Error error ->
         Printf.printf "Failed to convert response from %s: %s\n%!" (Yojson.Safe.to_string response) error;
         return None
+      (* We succeeded in decoding the JSON, but it indicated an error. TODO: better error handling *)
       | `Ok { API.code = code; payload = None } ->
         Printf.printf "Error %s in %s\n%!" code (Yojson.Safe.to_string response);
         return None
+      (* Everything's awesome! *)
       | `Ok { API.payload = Some payload } ->
         return (Some payload)
     in
@@ -93,6 +115,7 @@ struct
   (* let's consider this a special case for how *)
   let login_uri = endpoint_uri "user/login"
 
+  (* Unpacks the LwtResult-packaged Lwt.t from [request] *)
   let lwt f session argument =
     let LwtResult lwt = f session argument in
     lwt    
