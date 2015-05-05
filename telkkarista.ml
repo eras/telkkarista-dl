@@ -9,9 +9,11 @@ let return = Lwt.return
 
 let (/^) a b = a ^ "/" ^ b
 
-type 'env common = {
+type environment = [`Environment] (* temporary *)
+
+type common = {
   c_session : string;
-  c_env     : [`Environment];
+  c_env     : environment;
 }
 
 module API =
