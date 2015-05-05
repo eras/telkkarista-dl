@@ -21,9 +21,14 @@ type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 (* This makes 'a Lwt.t non-abstract *)
 type 'a lwt_result = LwtResult of 'a Lwt.t
 
+type ('session, 'a, 'b) result = ('session -> 'a -> 'b option lwt_result)
+
+type session = string
+
 type _ request =
-  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (unit -> 'b option lwt_result) request
-  | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> ('a -> 'b option lwt_result) request
+  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (session, unit, 'b) result request
+  | PostRequestNoSession: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (unit, 'a, 'b) result request
+  | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (session, 'a, 'b) result request
 
 let session_header session = ["X-SESSION", session]
 
@@ -65,7 +70,7 @@ struct
   
   let endpoint_uri service = Uri.of_string (base /^ Printf.sprintf "%d" version /^ service)
 
-  let request (type req) (type request_to_json) (type json_to_response) uri (request : req request) common : req =
+  let request (type req) (type session) uri (request : req request) : req =
     let handle_response json_to_response response =
       match API.response_of_yojson json_to_response response with
       | `Error error ->
@@ -78,20 +83,29 @@ struct
         return (Some payload)
     in
     match request with
-    | GetRequest json_to_response -> fun () ->
-      LwtResult (get ~session:common.c_session ~endpoint:uri >>= handle_response json_to_response)
-    | PostRequest (request_to_json, json_to_response) -> fun arg ->
+    | GetRequest json_to_response -> fun (session) () ->
+      LwtResult (get ~session ~endpoint:uri >>= handle_response json_to_response)
+    | PostRequestNoSession (request_to_json, json_to_response) -> fun () arg ->
       let body = Yojson.Safe.to_string (request_to_json arg) in
-      LwtResult (post_with_session ~session:common.c_session ~endpoint:uri ~body >>= handle_response json_to_response)
+      LwtResult (post_without_session ~endpoint:uri ~body >>= handle_response json_to_response)
+    | PostRequest (request_to_json, json_to_response) -> fun session arg ->
+      let body = Yojson.Safe.to_string (request_to_json arg) in
+      LwtResult (post_with_session ~session ~endpoint:uri ~body >>= handle_response json_to_response)
 
   (* let's consider this a special case for how *)
   let login_uri = endpoint_uri "user/login"
 
-  let checkSession = endpoint_uri "user/checkSession"
-
   let lwt f a b =
     let LwtResult lwt = f a b in
     lwt    
+
+  let login_request =
+    lwt @@ request
+      (endpoint_uri "user/login")
+      (PostRequestNoSession (API.login_request_to_yojson,
+                             API.login_response_of_yojson))
+
+  let checkSession = endpoint_uri "user/checkSession"
   
   let checkSession_request =
     lwt @@ request
