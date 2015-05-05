@@ -61,23 +61,12 @@ type range_single_response = (channel * programs)
 
 type range_response = range_single_response list
 
-let partition_map p xs =
-  let rec loop xs left right =
-    match xs with
-    | [] -> (List.rev left, List.rev right)
-    | x::xs ->
-      match p x with
-      | `Left x -> loop xs (x::left) (right)
-      | `Right x -> loop xs (left) (x::right)
-  in
-  loop xs [] []
-
 let assoc_of_yojson f error (json : Yojson.Safe.json) =
   match json with
   | `Assoc assoc ->
     ( let results = List.map (fun (k, v) -> (k, f v)) assoc in
       let ok, errors =
-        partition_map (
+        Tools.partition_map (
           function
           | (key, `Ok value) -> `Left (key, value)
           | (key, `Error error) -> `Right error)
