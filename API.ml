@@ -19,9 +19,11 @@ type login_request = {
   password      : string;
 } [@@deriving to_yojson]
 
+type session_token = string [@@deriving of_yojson]
+
 (* "status"     : "ok" *)
 (* "code"       : "login_ok" *)
-type login_response = string [@@deriving of_yojson]
+type login_response = session_token [@@deriving of_yojson]
 
 type range_request = {
   begin_ [@key "begin"] : string;

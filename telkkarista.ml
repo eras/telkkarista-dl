@@ -23,12 +23,10 @@ type 'a lwt_result = LwtResult of 'a Lwt.t
 
 type ('session, 'a, 'b) result = ('session -> 'a -> 'b option lwt_result)
 
-type session = string
-
 type _ request =
-  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (session, unit, 'b) result request
+  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (API.session_token, unit, 'b) result request
   | PostRequestNoSession: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (unit, 'a, 'b) result request
-  | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (session, 'a, 'b) result request
+  | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (API.session_token, 'a, 'b) result request
 
 let session_header session = ["X-SESSION", session]
 
