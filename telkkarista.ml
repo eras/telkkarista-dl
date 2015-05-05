@@ -85,18 +85,14 @@ struct
   let range_response_of_yojson = assoc_of_yojson programs_of_yojson "Invalid JSON for range response"
 end
 
-module Endpoints =
-struct
-  let version = 1
-  
-  let endpoint service = Uri.of_string (base /^ Printf.sprintf "%d" version /^ service)
+type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 
-  let login = endpoint "user/login"
-      
-  let checkSession = endpoint "user/checkSession"
+(* This makes 'a Lwt.t non-abstract *)
+type 'a lwt_result = LwtResult of 'a Lwt.t
 
-  let range = endpoint "epg/range"
-end
+type _ request =
+  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (unit -> 'b option lwt_result) request
+  | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> ('a -> 'b option lwt_result) request
 
 let session_header session = ["X-SESSION", session]
 
@@ -132,6 +128,54 @@ let request endpoint request from_json common respond =
   | `Ok response ->
     respond (Some response) 
 
+module Endpoints =
+struct
+  let version = 1
+  
+  let endpoint_uri service = Uri.of_string (base /^ Printf.sprintf "%d" version /^ service)
+
+  let request (type req) (type request_to_json) (type json_to_response) uri (request : req request) common : req =
+    let handle_response json_to_response response =
+      match API.response_of_yojson json_to_response response with
+      | `Error error ->
+        Printf.printf "Failed to convert response from %s: %s\n%!" (Yojson.Safe.to_string response) error;
+        return None
+      | `Ok { API.code = code; payload = None } ->
+        Printf.printf "Error %s in %s\n%!" code (Yojson.Safe.to_string response);
+        return None
+      | `Ok { API.payload = Some payload } ->
+        return (Some payload)
+    in
+    match request with
+    | GetRequest json_to_response -> fun () ->
+      LwtResult (get ~session:common.c_session ~endpoint:uri >>= handle_response json_to_response)
+    | PostRequest (request_to_json, json_to_response) -> fun arg ->
+      let body = Yojson.Safe.to_string (request_to_json arg) in
+      LwtResult (post_with_session ~session:common.c_session ~endpoint:uri ~body >>= handle_response json_to_response)
+
+  (* let's consider this a special case for how *)
+  let login_uri = endpoint_uri "user/login"
+
+  let checkSession = endpoint_uri "user/checkSession"
+
+  let lwt f a b =
+    let LwtResult lwt = f a b in
+    lwt    
+  
+  let checkSession_request =
+    lwt @@ request
+      (endpoint_uri "user/checkSession")
+      (GetRequest (API.checkSession_response_of_yojson))
+
+  let range = endpoint_uri "epg/range"
+
+  let range_request =
+    lwt @@ request
+      (endpoint_uri "epg/range")
+      (PostRequest (API.range_request_to_yojson,
+                    API.range_response_of_yojson))
+end
+
 let checkSession common =
   Lwt_unix.run (
     (* ~body:(`Stream (Lwt_stream.of_list ["foo"])) *)
@@ -163,7 +207,7 @@ let range common begin_ end_ =
 let login common email password =
   Lwt_unix.run (
     let body = Yojson.Safe.to_string @@ API.login_request_to_yojson { API.email; password } in
-    let%lwt response = post_without_session ~endpoint:Endpoints.login ~body in
+    let%lwt response = post_without_session ~endpoint:Endpoints.login_uri ~body in
     match API.response_of_yojson API.login_response_of_yojson response with
     | `Error error ->
       Printf.printf "Failed to extract json: %s\n%!" error;
