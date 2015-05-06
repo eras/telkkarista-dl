@@ -1,5 +1,29 @@
 open Batteries
 
+type error = [
+  | `Email_in_use [@name "email_in_use"]
+  | `Email_not_verified [@name "email_not_verified"]
+  | `Error_in_logout [@name "error_in_logout"]
+  | `Error_in_query [@name "error_in_query"]
+  | `Failed [@name "failed"]
+  | `Failed_insert_user [@name "failed_insert_user"]
+  | `Failed_to_start_session [@name "failed_to_start_session"]
+  | `Hash_error [@name "hash_error"]
+  | `Invalid_email [@name "invalid_email"]
+  | `Invalid_password [@name "invalid_password"]
+  | `No_session_found [@name "no_session_found"]
+  | `No_sessions [@name "no_sessions"]
+  | `No_user_found [@name "no_user_found"]
+  | `Not_found [@name "not_found"]
+  (* | `Null [@name "null"] *)
+  | `Password_too_short [@name "password_too_short"]
+  | `Pid_not_found [@name "pid_not_found"]
+  | `Pipe [@name "pipe"]
+  | `Salt_error [@name "salt_error"]
+  | `Search_error [@name "search_error"]
+  | `Unknown_error [@name "unknown_error"]
+] [@@deriving of_yojson]
+
 type 'a response = {
   status        : string;
   code          : string;
