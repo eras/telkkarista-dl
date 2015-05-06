@@ -209,7 +209,7 @@ let cmd_login env =
 let cmd_list env =
   let range common from_ to_ =
     interactive_request Endpoints.range_request common.c_session { API.from_; to_ } @@
-    fun programs -> ""
+    fun response -> API.show_range_response response
   in
   let doc = "List programs from given time range" in
   Term.(pure (lwt3 range) $ common_opts_t env $ begin_t $ end_t),
