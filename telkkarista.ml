@@ -31,52 +31,36 @@ type ('session, 'request, 'response) request =
   (* PostRequest is the typically used request with both input and output and session identifier *)
   | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (API.session_token, 'a, 'b) request
 
-(* Each request has this header (except PostRequestNoSession) *)
-let session_header session = ["X-SESSION", session]
-
-(* TODO: remove *)
-let post ~headers ~endpoint ~body =
-  let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
-  let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
-  let%lwt body_string = Cohttp_lwt_body.to_string body in
-  return (Yojson.Safe.from_string body_string)
-
-(* TODO: remove *)
-let post_with_session ~session ~endpoint ~body = post ~headers:(session_header session) ~endpoint ~body
-
-(* TODO: remove *)
-let post_without_session ~endpoint ~body = post ~headers:[] ~endpoint ~body
-
-(* TODO: remove *)
-let get ~session ~endpoint =
-  let headers = Cohttp.Header.of_list (session_header session) in
-  let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
-  let%lwt body_string = Cohttp_lwt_body.to_string body in
-  Printf.printf "Response: %s\n%!" body_string;
-  return (Yojson.Safe.from_string body_string)
-    
-(* TODO: remove *)
-let request endpoint request from_json common respond =
-  let%lwt response =
-    match request with
-    | None -> get ~session:common.c_session ~endpoint
-    | Some json ->
-      let body = Yojson.Safe.to_string json in
-      post_with_session ~session:common.c_session ~endpoint ~body
-  in
-  match API.response_of_yojson from_json response with
-  | `Error error ->
-    Printf.printf "Failed to convert response from %s: %s\n%!" (Yojson.Safe.to_string response) error;
-    respond None
-  | `Ok response ->
-    respond (Some response) 
-
 (* API end points with type safe interfaces *)
 module Endpoints =
 struct
   let version = 1
   
   let endpoint_uri service = Uri.of_string (base /^ Printf.sprintf "%d" version /^ service)
+
+  (* Each request has this header (except PostRequestNoSession) *)
+  let session_header session = ["X-SESSION", session]
+
+  (* Issues a general POST request to the endpoint *)
+  let post ~headers ~endpoint ~body =
+    let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
+    let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
+    let%lwt body_string = Cohttp_lwt_body.to_string body in
+    return (Yojson.Safe.from_string body_string)
+
+  (* Issues a POST request with session id to the endpoint *)
+  let post_with_session ~session ~endpoint ~body = post ~headers:(session_header session) ~endpoint ~body
+
+  (* Issues a POST request without session id to the endpoint *)
+  let post_without_session ~endpoint ~body = post ~headers:[] ~endpoint ~body
+
+  (* Issues a GET request with session id to the endpoint *)
+  let get ~session ~endpoint =
+    let headers = Cohttp.Header.of_list (session_header session) in
+    let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
+    let%lwt body_string = Cohttp_lwt_body.to_string body in
+    Printf.printf "Response: %s\n%!" body_string;
+    return (Yojson.Safe.from_string body_string)
 
   (* Construct a request object for the given resource. The return
      type [req] results in two more arguments: the session id (or ()
@@ -137,48 +121,39 @@ end
 let checkSession common =
   Lwt_unix.run (
     (* ~body:(`Stream (Lwt_stream.of_list ["foo"])) *)
-    let%lwt response = get ~session:common.c_session ~endpoint:Endpoints.checkSession in
-    match API.response_of_yojson API.checkSession_response_of_yojson response with
-    | `Error error ->
-      Printf.printf "Failed to extract json: %s\n%!" error;
-      return None;
+    match%lwt Endpoints.checkSession_request common.c_session () with
+    | None ->
+      Printf.printf "There was an error\n%!";
       return ()
-    | `Ok { payload = None } ->
-      Printf.printf "There was an error in the response: %s\n%!" (Yojson.Safe.to_string response);
-      return ()
-    | `Ok { payload = Some response } ->
+    | Some response ->
       Printf.printf "id: %s\n%!" response.API._id;
-      return (Some response);
       return ()
   )
 
-let checkSession' common =
-  Lwt_unix.run (
-    request Endpoints.checkSession None API.checkSession_response_of_yojson common (fun _ -> return ())
-  )
+let interactive_request endpoint session arg show =
+  let%lwt response = endpoint session arg in
+  match response with
+  | None ->
+    Printf.printf "There was an error\n%!";
+    return ()
+  | Some response ->
+    Printf.printf "%s\n%!" (show response);
+    return ()
+
+let checkSession common =
+  Lwt_unix.run @@
+  interactive_request Endpoints.checkSession_request common.c_session () @@
+  fun response -> response.API._id
 
 let range common begin_ end_ =
-  Lwt_unix.run (
-    request Endpoints.range (Some (API.range_request_to_yojson { API.begin_; end_ })) API.range_response_of_yojson common (fun _ -> return ())
-  )
+  Lwt_unix.run @@
+  interactive_request Endpoints.range_request common.c_session { API.begin_; end_ } @@
+  fun _ -> "got response"
 
 let login common email password =
-  Lwt_unix.run (
-    let body = Yojson.Safe.to_string @@ API.login_request_to_yojson { API.email; password } in
-    let%lwt response = post_without_session ~endpoint:Endpoints.login_uri ~body in
-    match API.response_of_yojson API.login_response_of_yojson response with
-    | `Error error ->
-      Printf.printf "Failed to extract json: %s\n%!" error;
-      return None;
-      return ()
-    | `Ok { payload = None } ->
-      Printf.printf "Failed to retrieve token: %s\n%!" (Yojson.Safe.to_string response);
-      return ()
-    | `Ok { payload = Some token } ->
-      Printf.printf "token: %s\n%!" token;
-      return (Some token);
-      return ()
-  )
+  Lwt_unix.run @@
+  interactive_request Endpoints.login_request () { API.email; password } @@
+  fun token -> token
 
 let common_opts env session = { c_session = session;
                                 c_env = env }
