@@ -72,6 +72,7 @@ type record_state = [
   | `Storage
   | `Pending
   | `Recording
+  | `None
 ] [@@deriving show]
 
 let record_state_of_yojson = function
@@ -84,7 +85,7 @@ type vod = {
   start         : timestamp;
   stop          : timestamp; (* "2015-04-30T21:30:00.000Z" *)
   title         : title;
-  record        : record_state option [@default None];
+  record        : record_state [@default `None];
   storageServer : string option [@default None];
   pid           : pid;
 } [@@deriving show, of_yojson { strict = false }]
