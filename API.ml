@@ -36,7 +36,7 @@ type checkSession_response = {
   lastActivity  : string;
   meta          : Yojson.Safe.json;
   email         : string;
-} [@@deriving of_yojson]
+} [@@deriving of_yojson { strict = false }]
 
 type login_request = {
   email         : string;
@@ -77,7 +77,7 @@ type vod = {
   record        : string;
   storageServer : string;
   pid           : pid;
-} [@@deriving of_yojson]
+} [@@deriving of_yojson { strict = false }]
 
 type channel = string [@@deriving of_yojson]
 
