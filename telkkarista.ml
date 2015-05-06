@@ -19,20 +19,17 @@ type common = {
 (* Converting JSON to proper data types uses this type *)
 type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 
-(* This makes 'a Lwt.t non-abstract for the purposes of GADT *)
-type 'a lwt_result = LwtResult of 'a Lwt.t
+type ('session, 'request, 'response) result = ('session -> 'request -> 'response option Lwt.t)
 
-type ('session, 'a, 'b) result = ('session -> 'a -> 'b option lwt_result)
-
-type _ request =
+type ('session, 'request, 'response) request =
   (* GetRequest has no parameters, but does have a response, ie. checkSession *)
-  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (API.session_token, unit, 'b) result request
+  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (API.session_token, unit, 'b) request
 
   (* PostRequestNoSession has parameters and response, but does not use session identifier, ie. login *)
-  | PostRequestNoSession: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (unit, 'a, 'b) result request
+  | PostRequestNoSession: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (unit, 'a, 'b) request
 
   (* PostRequest is the typically used request with both input and output and session identifier *)
-  | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (API.session_token, 'a, 'b) result request
+  | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (API.session_token, 'a, 'b) request
 
 (* Each request has this header (except PostRequestNoSession) *)
 let session_header session = ["X-SESSION", session]
@@ -87,7 +84,7 @@ struct
      () if no data argument as with GetRequest). The return type will
      be packaged to LwtResult due to GADT reasons; use [lwt] to
      unpackage it. *)
-  let request (type req) (type session) uri (request : req request) : req =
+  let request (type session) (type request_) (type response) uri (request : (session, request_, response) request) : (session, request_, response) result =
     let handle_response json_to_response response =
       match API.response_of_yojson json_to_response response with
       (* We failed to decode then JSON; TODO: better error handling *)
@@ -104,24 +101,19 @@ struct
     in
     match request with
     | GetRequest json_to_response -> fun (session) () ->
-      LwtResult (get ~session ~endpoint:uri >>= handle_response json_to_response)
+      get ~session ~endpoint:uri >>= handle_response json_to_response
     | PostRequestNoSession (request_to_json, json_to_response) -> fun () arg ->
       let body = Yojson.Safe.to_string (request_to_json arg) in
-      LwtResult (post_without_session ~endpoint:uri ~body >>= handle_response json_to_response)
+      post_without_session ~endpoint:uri ~body >>= handle_response json_to_response
     | PostRequest (request_to_json, json_to_response) -> fun session arg ->
       let body = Yojson.Safe.to_string (request_to_json arg) in
-      LwtResult (post_with_session ~session ~endpoint:uri ~body >>= handle_response json_to_response)
+      post_with_session ~session ~endpoint:uri ~body >>= handle_response json_to_response
 
   (* let's consider this a special case for how *)
   let login_uri = endpoint_uri "user/login"
 
-  (* Unpacks the LwtResult-packaged Lwt.t from [request] *)
-  let lwt f session argument =
-    let LwtResult lwt = f session argument in
-    lwt    
-
   let login_request =
-    lwt @@ request
+    request
       (endpoint_uri "user/login")
       (PostRequestNoSession (API.login_request_to_yojson,
                              API.login_response_of_yojson))
@@ -129,14 +121,14 @@ struct
   let checkSession = endpoint_uri "user/checkSession"
   
   let checkSession_request =
-    lwt @@ request
+    request
       (endpoint_uri "user/checkSession")
       (GetRequest (API.checkSession_response_of_yojson))
 
   let range = endpoint_uri "epg/range"
 
   let range_request =
-    lwt @@ request
+    request
       (endpoint_uri "epg/range")
       (PostRequest (API.range_request_to_yojson,
                     API.range_response_of_yojson))
