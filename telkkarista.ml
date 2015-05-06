@@ -43,9 +43,11 @@ struct
 
   (* Issues a general POST request to the endpoint *)
   let post ~headers ~endpoint ~body =
+    Printf.printf "Requesting: %s\n%!" body;
     let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
     let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
     let%lwt body_string = Cohttp_lwt_body.to_string body in
+    Printf.printf "Response: %s\n%!" body_string;
     return (Yojson.Safe.from_string body_string)
 
   (* Issues a POST request with session id to the endpoint *)
