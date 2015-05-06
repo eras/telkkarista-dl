@@ -100,7 +100,7 @@ let assoc_of_yojson f error (json : Yojson.Safe.json) =
       in
       match errors with
       | [] -> `Ok ok
-      | errors -> `Error (String.concat " & " errors) )
-  | _ -> `Error error
+      | errors -> `Error (Printf.sprintf "Error when expecting associative table for %s: %s" error (String.concat " & " errors)) )
+  | _ -> `Error (Printf.sprintf "Expected associative table for %s but got %s" error (Yojson.Safe.to_string json))
 
-let range_response_of_yojson = assoc_of_yojson programs_of_yojson "Invalid JSON for range response"
+let range_response_of_yojson = assoc_of_yojson programs_of_yojson "range response"
