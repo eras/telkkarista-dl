@@ -142,21 +142,6 @@ let interactive_request endpoint session arg show =
     Printf.printf "%s\n%!" (show response);
     return ()
 
-let checkSession common =
-  Lwt_unix.run @@
-  interactive_request Endpoints.checkSession_request common.c_session () @@
-  fun response -> response.API._id
-
-let range common begin_ end_ =
-  Lwt_unix.run @@
-  interactive_request Endpoints.range_request common.c_session { API.begin_; end_ } @@
-  fun _ -> "got response"
-
-let login common email password =
-  Lwt_unix.run @@
-  interactive_request Endpoints.login_request () { API.email; password } @@
-  fun token -> token
-
 let common_opts env session = { c_session = session;
                                 c_env = env }
 
@@ -176,6 +161,14 @@ let password_t =
   let doc = "Password. This is required." in
   Arg.(required & opt (some string) None & info ["p"; "pass"] ~doc)
 
+let begin_t =
+  let doc = "Begin time stamp of the range." in
+  Arg.(required & opt (some string) None & info ["b"; "begin"] ~doc)
+
+let end_t =
+  let doc = "End time stamp of the range." in
+  Arg.(required & opt (some string) None & info ["e"; "end"] ~doc)
+
 let help_subcommands = [
   `S "COMMON OPTIONS";
   `P "These options are common to all commands.";
@@ -189,20 +182,44 @@ let default_prompt env =
   Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_opts_t env)),
   Term.info program_name ~version ~sdocs:"COMMON OPTIONS" ~doc ~man
 
+let lwt1 f a = Lwt_unix.run (f a)
+let lwt2 f a b = Lwt_unix.run (f a b)
+let lwt3 f a b c = Lwt_unix.run (f a b c)
+let lwt4 f a b c d = Lwt_unix.run (f a b c d)
+let lwt5 f a b c d e = Lwt_unix.run (f a b c d e)
+
 let cmd_checkSession env =
+  let checkSession common =
+    interactive_request Endpoints.checkSession_request common.c_session () @@
+    fun response -> response.API._id
+  in
   let doc = "Check session status" in
-  Term.(pure checkSession $ common_opts_t env),
+  Term.(pure (lwt1 checkSession) $ common_opts_t env),
   Term.info "checkSession" ~version ~doc
 
 let cmd_login env =
+  let login common email password =
+    interactive_request Endpoints.login_request () { API.email; password } @@
+    fun token -> token
+  in
   let doc = "Log into the service" in
-  Term.(pure login $ common_opts_t env $ username_t $ password_t),
+  Term.(pure (lwt3 login) $ common_opts_t env $ username_t $ password_t),
   Term.info "login" ~version ~doc
+
+let cmd_list env =
+  let range common from_ to_ =
+    interactive_request Endpoints.range_request common.c_session { API.from_; to_ } @@
+    fun programs -> ""
+  in
+  let doc = "List programs from given time range" in
+  Term.(pure (lwt3 range) $ common_opts_t env $ begin_t $ end_t),
+  Term.info "list" ~version ~doc
 
 let main () =
   let subcommands = [
     cmd_checkSession;
     cmd_login;
+    cmd_list;
   ] in
   let env = `Environment in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)
