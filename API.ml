@@ -1,5 +1,3 @@
-open Batteries
-
 type error = [
   | `Email_in_use [@name "email_in_use"]
   | `Email_not_verified [@name "email_not_verified"]
@@ -49,12 +47,12 @@ type session_token = string [@@deriving of_yojson]
 (* "code"       : "login_ok" *)
 type login_response = session_token [@@deriving of_yojson]
 
-type timestamp = string [@@deriving yojson]
+type timestamp = string [@@deriving show, yojson]
 
 type range_request = {
-  begin_ [@key "begin"] : timestamp;
-  end_ [@key "end"]     : timestamp;
-} [@@deriving to_yojson]
+  from_ [@key "from"] : timestamp;
+  to_ [@key "to"]     : timestamp;
+} [@@deriving show,to_yojson]
 
 type quality = string [@@deriving of_yojson]
 
@@ -66,22 +64,34 @@ type download_formats = {
 type title = {
   fi            : string [@default ""];
   sv            : string [@default ""];
-} [@@deriving of_yojson { strict = false }]
+} [@@deriving show, of_yojson { strict = false }]
 
-type pid = string [@@deriving of_yojson]
+type pid = string [@@deriving show, of_yojson]
+
+type record_state = [
+  | `Storage
+  | `Pending
+  | `Recording
+] [@@deriving show]
+
+let record_state_of_yojson = function
+  | `String "storage" -> `Ok `Storage
+  | `String "pending" -> `Ok `Pending
+  | `String "recording" -> `Ok `Recording
+  | _ -> `Error "API.record_state"
 
 type vod = {
   start         : timestamp;
   stop          : timestamp; (* "2015-04-30T21:30:00.000Z" *)
   title         : title;
-  record        : string;
-  storageServer : string;
+  record        : record_state option [@default None];
+  storageServer : string option [@default None];
   pid           : pid;
-} [@@deriving of_yojson { strict = false }]
+} [@@deriving show, of_yojson { strict = false }]
 
-type channel = string [@@deriving of_yojson]
+type channel = string [@@deriving show, of_yojson]
 
-type programs = vod list [@@deriving of_yojson]
+type programs = vod list [@@deriving show, of_yojson]
 
 type range_single_response = (channel * programs)
 
@@ -90,12 +100,12 @@ type range_response = range_single_response list
 let assoc_of_yojson f error (json : Yojson.Safe.json) =
   match json with
   | `Assoc assoc ->
-    ( let results = List.map (fun (k, v) -> (k, f v)) assoc in
+    ( let results = List.map (fun (k, v) -> (k, v, f v)) assoc in
       let ok, errors =
         Tools.partition_map (
           function
-          | (key, `Ok value) -> `Left (key, value)
-          | (key, `Error error) -> `Right error)
+          | (key, _, `Ok value) -> `Left (key, value)
+          | (key, json, `Error error) -> `Right (error ^ "(" ^ Yojson.Safe.to_string json ^ ")"))
           results
       in
       match errors with
@@ -104,3 +114,9 @@ let assoc_of_yojson f error (json : Yojson.Safe.json) =
   | _ -> `Error (Printf.sprintf "Expected associative table for %s but got %s" error (Yojson.Safe.to_string json))
 
 let range_response_of_yojson = assoc_of_yojson programs_of_yojson "range response"
+
+let show_range_response (range_response : range_response) =
+  String.concat ", " @@
+  List.map (fun (channel, programs) -> show_channel channel ^ ": " ^ show_programs programs) range_response
+   
+
