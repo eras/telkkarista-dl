@@ -10,13 +10,6 @@ let return = Lwt.return
 
 let (^/) a b = a ^ "/" ^ b
 
-type environment = [`Environment] (* temporary *)
-
-type common = {
-  c_session : API.session_token; (* session id is kept here *)
-  c_env     : environment;       (* auxiliary environment data (ie. loaded configuration, location of configuration) *)
-}
-
 (* Converting JSON to proper data types uses this type *)
 type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 
@@ -142,7 +135,7 @@ let interactive_request endpoint session arg show =
     Printf.printf "%s\n%!" (show response);
     return ()
 
-let common_opts env session = { c_session = session;
+let common_opts env session = { Common.c_session = session;
                                 c_env = env }
 
 let common_opts_t env =
@@ -201,7 +194,7 @@ let lwt5 f a b c d e = Lwt_unix.run (f a b c d e)
 
 let cmd_checkSession env =
   let checkSession common =
-    interactive_request Endpoints.checkSession_request common.c_session () @@
+    interactive_request Endpoints.checkSession_request common.Common.c_session () @@
     fun response -> response.API._id
   in
   let doc = "Check session status" in
@@ -219,7 +212,7 @@ let cmd_login env =
 
 let cmd_list env =
   let range common from_ to_ =
-    interactive_request Endpoints.range_request common.c_session { API.from_; to_ } @@
+    interactive_request Endpoints.range_request common.Common.c_session { API.from_; to_ } @@
     fun response -> API.show_range_response response
   in
   let doc = "List programs from given time range" in
