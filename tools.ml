@@ -12,3 +12,18 @@ let partition_map : ('a -> [< `Left of 'b | `Right of 'c ]) -> 'a list -> 'b lis
   in
   loop xs [] []
 
+let assoc_of_yojson f error (json : Yojson.Safe.json) =
+  match json with
+  | `Assoc assoc ->
+    ( let results = List.map (fun (k, v) -> (k, v, f v)) assoc in
+      let ok, errors =
+        partition_map (
+          function
+          | (key, _, `Ok value) -> `Left (key, value)
+          | (key, json, `Error error) -> `Right (error ^ "(" ^ Yojson.Safe.to_string json ^ ")"))
+          results
+      in
+      match errors with
+      | [] -> `Ok ok
+      | errors -> `Error (Printf.sprintf "Error when expecting associative table for %s: %s" error (String.concat " & " errors)) )
+  | _ -> `Error (Printf.sprintf "Expected associative table for %s but got %s" error (Yojson.Safe.to_string json))

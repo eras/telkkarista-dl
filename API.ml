@@ -111,23 +111,7 @@ type range_single_response = (channel * programs)
 
 type range_response = range_single_response list
 
-let assoc_of_yojson f error (json : Yojson.Safe.json) =
-  match json with
-  | `Assoc assoc ->
-    ( let results = List.map (fun (k, v) -> (k, v, f v)) assoc in
-      let ok, errors =
-        Tools.partition_map (
-          function
-          | (key, _, `Ok value) -> `Left (key, value)
-          | (key, json, `Error error) -> `Right (error ^ "(" ^ Yojson.Safe.to_string json ^ ")"))
-          results
-      in
-      match errors with
-      | [] -> `Ok ok
-      | errors -> `Error (Printf.sprintf "Error when expecting associative table for %s: %s" error (String.concat " & " errors)) )
-  | _ -> `Error (Printf.sprintf "Expected associative table for %s but got %s" error (Yojson.Safe.to_string json))
-
-let range_response_of_yojson = assoc_of_yojson programs_of_yojson "range response"
+let range_response_of_yojson = Tools.assoc_of_yojson programs_of_yojson "range response"
 
 let show_range_response (range_response : range_response) =
   String.concat ", " @@
