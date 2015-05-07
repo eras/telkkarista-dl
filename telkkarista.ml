@@ -7,7 +7,7 @@ let base = "http://api.telkkarista.com"
 
 let return = Lwt.return
 
-let (/^) a b = a ^ "/" ^ b
+let (^/) a b = a ^ "/" ^ b
 
 type environment = [`Environment] (* temporary *)
 
@@ -36,7 +36,7 @@ module Endpoints =
 struct
   let version = 1
   
-  let endpoint_uri service = Uri.of_string (base /^ Printf.sprintf "%d" version /^ service)
+  let endpoint_uri service = Uri.of_string (base ^/ Printf.sprintf "%d" version ^/ service)
 
   (* Each request has this header (except PostRequestNoSession) *)
   let session_header session = ["X-SESSION", session]
