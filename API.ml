@@ -74,11 +74,13 @@ type download_formats = {
   ts            : quality list [@default []]
 } [@@deriving of_yojson { strict = false }]
 
-type title = {
-  fi            : string [@default ""];
-  sv            : string [@default ""];
-} [@@deriving show, of_yojson { strict = false }]
+type language = string [@@deriving show, of_yojson]
+type title = string [@@deriving show, of_yojson]
 
+type language_titles = (language * title) list [@@deriving show]
+
+let language_titles_of_yojson = Tools.assoc_of_yojson title_of_yojson "API.title_of_yojson"
+  
 type pid = string [@@deriving show, of_yojson]
 
 type record_state = [
@@ -97,7 +99,7 @@ let record_state_of_yojson = function
 type vod = {
   start         : timestamp;
   stop          : timestamp; (* "2015-04-30T21:30:00.000Z" *)
-  title         : title;
+  title         : language_titles;
   record        : record_state [@default `None];
   storageServer : string option [@default None];
   pid           : pid;
