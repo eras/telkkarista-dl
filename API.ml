@@ -67,12 +67,12 @@ type range_request = {
   to_ [@key "to"]     : timestamp;
 } [@@deriving show,to_yojson]
 
-type quality = string [@@deriving of_yojson]
+type quality = string [@@deriving show, of_yojson]
 
-type download_formats = {
-  mp4           : quality list [@default []];
-  ts            : quality list [@default []]
-} [@@deriving of_yojson { strict = false }]
+type qualities = quality list [@@deriving show, of_yojson]
+
+type download_formats = (string * qualities) list [@@deriving show]
+let download_formats_of_yojson = Tools.assoc_of_yojson qualities_of_yojson "API.download_formats"
 
 type language = string [@@deriving show, of_yojson]
 type title = string [@@deriving show, of_yojson]
@@ -103,6 +103,8 @@ type vod = {
   record        : record_state [@default `None];
   storageServer : string option [@default None];
   pid           : pid;
+  recordpath    : string option [@default None];
+  downloadFormats: download_formats [@default []];
 } [@@deriving show, of_yojson { strict = false }]
 
 type channel = string [@@deriving show, of_yojson]
