@@ -132,18 +132,6 @@ struct
         None
 end
 
-let checkSession common =
-  Lwt_unix.run (
-    (* ~body:(`Stream (Lwt_stream.of_list ["foo"])) *)
-    match%lwt Endpoints.checkSession_request common.c_session () with
-    | None ->
-      Printf.printf "There was an error\n%!";
-      return ()
-    | Some response ->
-      Printf.printf "id: %s\n%!" response.API._id;
-      return ()
-  )
-
 let interactive_request endpoint session arg show =
   let%lwt response = endpoint session arg in
   match response with
