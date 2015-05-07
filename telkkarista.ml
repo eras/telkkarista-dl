@@ -206,7 +206,7 @@ let cmd_checkSession env =
   in
   let doc = "Check session status" in
   Term.(pure (lwt1 checkSession) $ common_opts_t env),
-  Term.info "checkSession" ~version ~doc
+  Term.info "checkSession" ~doc
 
 let cmd_login env =
   let login common email password =
@@ -215,7 +215,7 @@ let cmd_login env =
   in
   let doc = "Log into the service" in
   Term.(pure (lwt3 login) $ common_opts_t env $ username_t $ password_t),
-  Term.info "login" ~version ~doc
+  Term.info "login" ~doc
 
 let cmd_list env =
   let range common from_ to_ =
@@ -224,7 +224,7 @@ let cmd_list env =
   in
   let doc = "List programs from given time range" in
   Term.(pure (lwt3 range) $ common_opts_t env $ begin_t $ end_t),
-  Term.info "list" ~version ~doc
+  Term.info "list" ~doc
 
 let main () =
   let subcommands = [
