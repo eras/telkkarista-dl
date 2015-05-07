@@ -24,10 +24,10 @@ type ('session, 'request, 'response) result = ('session -> 'request -> 'response
 
 type ('session, 'request, 'response) request =
   (* GetRequest has no parameters, but does have a response, ie. checkSession *)
-  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (API.session_token, unit, 'b) request
+  | GetRequest: (Yojson.Safe.json -> 'b of_json_result) -> (API.session_token, 'ignore, 'b) request
 
   (* PostRequestNoSession has parameters and response, but does not use session identifier, ie. login *)
-  | PostRequestNoSession: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (unit, 'a, 'b) request
+  | PostRequestNoSession: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> ('ignore, 'a, 'b) request
 
   (* PostRequest is the typically used request with both input and output and session identifier *)
   | PostRequest: (('a -> Yojson.Safe.json) * (Yojson.Safe.json -> 'b of_json_result)) -> (API.session_token, 'a, 'b) request
@@ -87,9 +87,9 @@ struct
         return (Some payload)
     in
     match request with
-    | GetRequest json_to_response -> fun (session) () ->
+    | GetRequest json_to_response -> fun (session) _ ->
       get ~session ~endpoint:uri >>= handle_response json_to_response
-    | PostRequestNoSession (request_to_json, json_to_response) -> fun () arg ->
+    | PostRequestNoSession (request_to_json, json_to_response) -> fun _ arg ->
       let body = Yojson.Safe.to_string (request_to_json arg) in
       post_without_session ~endpoint:uri ~body >>= handle_response json_to_response
     | PostRequest (request_to_json, json_to_response) -> fun session arg ->
