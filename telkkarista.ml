@@ -1,3 +1,4 @@
+open Batteries
 open Lwt.Infix
 open Cmdliner
 
@@ -118,6 +119,17 @@ struct
       (endpoint_uri "epg/range")
       (PostRequest (API.range_request_to_yojson,
                     API.range_response_of_yojson))
+
+  let download_url server (session_token : API.session_token) format quality vod =
+    match vod.API.recordpath, List.mem_assoc format vod.API.downloadFormats with
+    | None, _ -> None
+    | _, false -> None
+    | Some recordpath, true ->
+      let qualities = List.assoc format vod.API.downloadFormats in
+      if List.mem quality qualities then
+        Some ("http://" ^/ server ^/ session_token ^/ "vod" ^ recordpath ^ format ^ "." ^ quality)
+      else
+        None
 end
 
 let checkSession common =
