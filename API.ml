@@ -47,7 +47,20 @@ type session_token = string [@@deriving of_yojson]
 (* "code"       : "login_ok" *)
 type login_response = session_token [@@deriving of_yojson]
 
-type timestamp = string [@@deriving show, yojson]
+type timestamp = float
+
+let timestamp_to_yojson timestamp = `String (ISO8601.Permissive.string_of_datetimezone (timestamp, 0.0))
+let timestamp_of_yojson yojson =
+  match yojson with
+  | `String datetime_str ->
+    ( try `Ok (ISO8601.Permissive.datetime datetime_str)
+      with _ -> `Error "API.timestamp_of_yojson" )
+  | _ -> `Error "API.timestamp_of_yojson"
+
+let show_timestamp timestamp =
+  Printf.sprintf "%s" (ISO8601.Permissive.string_of_datetimezone (timestamp, -. float (Netdate.get_localzone ()) *. 60.0))
+
+let pp_timestamp fmt timestamp = Format.fprintf fmt "%s" (show_timestamp timestamp)
 
 type range_request = {
   from_ [@key "from"] : timestamp;

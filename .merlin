@@ -5,5 +5,7 @@ PKG lwt
 PKG cohttp.lwt
 PKG cmdliner
 PKG yojson
+PKG ISO8601
+PKG netstring
 FLG -w -40
 

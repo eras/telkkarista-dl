@@ -161,13 +161,24 @@ let password_t =
   let doc = "Password. This is required." in
   Arg.(required & opt (some string) None & info ["p"; "pass"] ~doc)
 
+let datetime : float Cmdliner.Arg.converter =
+  let parser str =
+    try
+      ( match ISO8601.Permissive.datetime_tz str with
+        | (t, Some tz) -> `Ok t
+        | (t0, None) -> `Ok (t0 -. float (Netdate.get_localzone ()) *. 60.0))
+    with _ -> `Error ("Invalid date time: " ^ str)
+  in
+  let printer fmt time = Format.fprintf fmt "%s" (ISO8601.Permissive.string_of_datetime time) in
+  (parser, printer)
+
 let begin_t =
   let doc = "Begin time stamp of the range." in
-  Arg.(required & opt (some string) None & info ["b"; "begin"] ~doc)
+  Arg.(required & opt (some datetime) None & info ["b"; "begin"] ~doc)
 
 let end_t =
   let doc = "End time stamp of the range." in
-  Arg.(required & opt (some string) None & info ["e"; "end"] ~doc)
+  Arg.(required & opt (some datetime) None & info ["e"; "end"] ~doc)
 
 let help_subcommands = [
   `S "COMMON OPTIONS";
