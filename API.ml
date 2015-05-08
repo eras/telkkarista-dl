@@ -32,7 +32,7 @@ type checkSession_response = {
   _id           : string;
   user_id       : string;
   lastActivity  : string;
-  meta          : Yojson.Safe.json;
+  meta          : Tools.json;
   email         : string;
 } [@@deriving of_yojson { strict = false }]
 
