@@ -85,7 +85,7 @@ type language_titles = (language * title) list [@@deriving show]
 
 let language_titles_of_yojson = Tools.assoc_of_yojson title_of_yojson "API.title_of_yojson"
   
-type pid = string [@@deriving show, of_yojson]
+type pid = string [@@deriving show, yojson]
 
 type record_state = [
   | `Storage
@@ -104,9 +104,11 @@ type vod = {
   start         : timestamp;
   stop          : timestamp; (* "2015-04-30T21:30:00.000Z" *)
   title         : language_titles;
+  subtitle [@key "sub-title"] : language_titles [@default []];
+  lastUpdate    : timestamp option [@default None];
   record        : record_state [@default `None];
   storageServer : string option [@default None];
-  pid           : pid;
+  pid           : pid option [@default None];
   recordpath    : string option [@default None];
   downloadFormats: download_formats [@default []];
 } [@@deriving show, of_yojson { strict = false }]
@@ -145,3 +147,18 @@ type cache = {
 } [@@deriving show, of_yojson { strict = false }]
 
 type cache_response = cache list [@@deriving show, of_yojson]
+
+(* used for queries that don't really have a proper response type yet *)
+type json_response = Tools.json [@@deriving show, of_yojson]
+    
+type client_vod_getUrl_request = {
+  pid   : pid;
+  path  : string;
+  file  : string;
+} [@@deriving to_yojson]
+
+type epg_info_request = {
+  pid   : pid;
+} [@@deriving to_yojson]
+
+type epg_info_response = vod [@@deriving show, of_yojson { strict = false }]

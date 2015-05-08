@@ -62,3 +62,7 @@ let get_email_password t =
   | _ -> None
 
 let get_session t = get_string t "session"
+
+let set_cache_server t cache_server = set_string t "cache_server" cache_server
+
+let get_cache_server t = get_string t "cache_server"

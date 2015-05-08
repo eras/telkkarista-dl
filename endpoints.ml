@@ -108,14 +108,14 @@ let range_request =
     (PostRequest (API.range_request_to_yojson,
                   API.range_response_of_yojson))
 
-let download_url server (session_token : API.session_token) format quality vod =
+let download_url cache_server (session_token : API.session_token) format quality vod basename =
   match vod.API.recordpath, List.mem_assoc format vod.API.downloadFormats with
   | None, _ -> None
   | _, false -> None
   | Some recordpath, true ->
     let qualities = List.assoc format vod.API.downloadFormats in
     if List.mem quality qualities then
-      Some ("http://" ^/ server ^/ session_token ^/ "vod" ^ recordpath ^ format ^ "." ^ quality)
+      Some ("http://" ^ cache_server ^/ session_token ^/ "vod" ^ recordpath ^ quality ^/ basename ^ "." ^ format)
     else
       None
 
@@ -123,3 +123,15 @@ let cache_request =
   request
     (endpoint_uri "cache/get")
     (GetRequest API.cache_response_of_yojson)
+
+let client_vod_getUrl_request =
+  request
+    (endpoint_uri "client/vod/getUrl")
+    (PostRequest (API.client_vod_getUrl_request_to_yojson,
+                  API.json_response_of_yojson))
+
+let epg_info_request =
+  request
+    (endpoint_uri "epg/info")
+    (PostRequest (API.epg_info_request_to_yojson,
+                  API.epg_info_response_of_yojson))

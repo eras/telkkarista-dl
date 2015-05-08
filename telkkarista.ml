@@ -38,6 +38,22 @@ let password_t persist =
   let doc = "Password. This is required." in
   Arg.(required & opt (some string) (Option.map snd (Persist.get_email_password persist)) & info ["p"; "pass"] ~doc)
 
+let pid_t =
+  let doc = "Program ID. This is required." in
+  Arg.(required & opt (some string) None & info ["p"; "pid"] ~doc)
+
+let format_t =
+  let doc = "Format for download. This is required." in
+  Arg.(required & opt (some string) None & info ["f"; "format"] ~doc)
+
+let quality_t =
+  let doc = "Quality for download. This is required." in
+  Arg.(required & opt (some string) None & info ["q"; "quality"] ~doc)
+
+let cache_server_t =
+  let doc = "Cache server for download. This is required." in
+  Arg.(required & opt (some string) None & info ["c"; "cache"] ~doc)
+
 let datetime : float Cmdliner.Arg.converter =
   let parser str =
     try
@@ -115,12 +131,69 @@ let cmd_cache env =
   Term.(pure (lwt1 cache) $ common_opts_t env),
   Term.info "cache" ~doc
 
+(* useless currently. what are the parameters to the request? *)
+let cmd_vod_url env =
+  let vod_url common pid =
+    match%lwt Endpoints.epg_info_request common.Common.c_session { API.pid } with
+    | None ->
+      Printf.printf "Sorry, no such programm id could be found\n";
+      return ()
+    | Some ({ recordpath = Some recordpath }) ->
+      let request = {
+        API.pid;
+        path = recordpath;
+        file = "highest.mp4";
+      } in
+      interactive_request Endpoints.client_vod_getUrl_request common.Common.c_session request @@
+      fun response -> API.show_json_response response
+    | Some _ ->
+      Printf.printf "Sorry, no recording for the program id could be found\n";
+      return ()
+  in
+  let doc = "NOT WORKING: Retrieve the URL of a program" in
+  Term.(pure (lwt2 vod_url) $ common_opts_t env $ pid_t),
+  Term.info "vod-url" ~doc
+
+let cmd_url env =
+  let url common cache_server pid format quality =
+    match%lwt Endpoints.epg_info_request common.Common.c_session { API.pid } with
+    | None ->
+      Printf.printf "Sorry, no such programm id could be found\n";
+      return ()
+    | Some ({ recordpath = Some recordpath } as info) ->
+      let url = Endpoints.download_url cache_server common.Common.c_session format quality info "file" in
+      Printf.printf "%s\n%!" (Option.default "not available" url);
+      return ()
+    | Some _ ->
+      Printf.printf "Sorry, no recording for the program id could be found\n";
+      return ()
+  in
+  let doc = "Retrieve the URL of a program" in
+  Term.(pure (lwt5 url) $ common_opts_t env $ cache_server_t $ pid_t $ format_t $ quality_t),
+  Term.info "url" ~doc
+  
+
+let cmd_epg_info env =
+  let epg_info common pid =
+    let request = {
+      API.pid = pid;
+    } in
+    interactive_request Endpoints.epg_info_request common.Common.c_session request @@
+    API.show_epg_info_response
+  in
+  let doc = "Retrieve info about a program" in
+  Term.(pure (lwt2 epg_info) $ common_opts_t env $ pid_t),
+  Term.info "info" ~doc
+
 let main () =
   let subcommands = [
     cmd_checkSession;
     cmd_login;
     cmd_list;
     cmd_cache;
+    cmd_epg_info;
+    cmd_vod_url;
+    cmd_url;
   ] in
   let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)
