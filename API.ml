@@ -36,9 +36,13 @@ type checkSession_response = {
   email         : string;
 } [@@deriving of_yojson { strict = false }]
 
+type email = string [@@deriving to_yojson]
+
+type password = string [@@deriving to_yojson]
+
 type login_request = {
-  email         : string;
-  password      : string;
+  email         : email;
+  password      : password;
 } [@@deriving to_yojson]
 
 type session_token = string [@@deriving of_yojson]
