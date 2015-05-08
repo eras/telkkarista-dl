@@ -124,5 +124,24 @@ let range_response_of_yojson = Tools.assoc_of_yojson programs_of_yojson "range r
 let show_range_response (range_response : range_response) =
   String.concat ", " @@
   List.map (fun (channel, programs) -> show_channel channel ^ ": " ^ show_programs programs) range_response
-   
 
+type host = string [@@deriving show, of_yojson]
+
+type country = string [@@deriving show, of_yojson]
+
+type status = Up | Down | Other of string [@@deriving show]
+
+let status_of_yojson = function
+  | `String "up" -> `Ok Up
+  | `String "down" -> `Ok Down
+  (* This should probably go away: *)
+  | `String other -> `Error ("status_of_json: invalid status: " ^ other)
+  | json -> `Error ("status_of_json: not a string: " ^ Yojson.Safe.to_string json)
+
+type cache = {
+  host    : host;
+  country : country;
+  status  : status;
+} [@@deriving show, of_yojson { strict = false }]
+
+type cache_response = cache list [@@deriving show, of_yojson]

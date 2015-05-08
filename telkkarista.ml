@@ -106,11 +106,21 @@ let cmd_list env =
   Term.(pure (lwt3 range) $ common_opts_t env $ begin_t $ end_t),
   Term.info "list" ~doc
 
+let cmd_cache env =
+  let cache common =
+    interactive_request Endpoints.cache_request common.Common.c_session () @@
+    fun response -> API.show_cache_response response
+  in
+  let doc = "List cache servers" in
+  Term.(pure (lwt1 cache) $ common_opts_t env),
+  Term.info "cache" ~doc
+
 let main () =
   let subcommands = [
     cmd_checkSession;
     cmd_login;
     cmd_list;
+    cmd_cache;
   ] in
   let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)

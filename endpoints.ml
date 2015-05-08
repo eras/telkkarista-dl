@@ -118,3 +118,8 @@ let download_url server (session_token : API.session_token) format quality vod =
       Some ("http://" ^/ server ^/ session_token ^/ "vod" ^ recordpath ^ format ^ "." ^ quality)
     else
       None
+
+let cache_request =
+  request
+    (endpoint_uri "cache/get")
+    (GetRequest API.cache_response_of_yojson)
