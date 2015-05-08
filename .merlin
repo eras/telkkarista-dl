@@ -7,5 +7,6 @@ PKG cmdliner
 PKG yojson
 PKG ISO8601
 PKG netstring
+PKG toml
 FLG -w -40
 

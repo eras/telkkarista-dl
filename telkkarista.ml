@@ -17,24 +17,26 @@ let interactive_request endpoint session arg show =
     Printf.printf "%s\n%!" (show response);
     return ()
 
-let common_opts env session = { Common.c_session = session;
-                                c_env = env }
+let common_opts env session = {
+  Common.c_session = session;
+  c_env = env;
+}
 
 let common_opts_t env =
   let docs = "COMMON OPTIONS" in 
   let session = 
     let doc = "Set session id" in
-    Arg.(value & opt string "" & info ["s"; "session"] ~docs ~doc)
+    Arg.(value & opt string (Option.default "" (Persist.get_session env.Common.e_persist)) & info ["s"; "session"] ~docs ~doc)
   in
   Term.(pure (common_opts env) $ session)
 
-let username_t =
+let username_t persist =
   let doc = "User name (email). This is required." in
-  Arg.(required & opt (some string) None & info ["u"; "user"] ~doc)
+  Arg.(required & opt (some string) (Option.map fst (Persist.get_email_password persist)) & info ["u"; "user"] ~doc)
 
-let password_t =
+let password_t persist =
   let doc = "Password. This is required." in
-  Arg.(required & opt (some string) None & info ["p"; "pass"] ~doc)
+  Arg.(required & opt (some string) (Option.map snd (Persist.get_email_password persist)) & info ["p"; "pass"] ~doc)
 
 let datetime : float Cmdliner.Arg.converter =
   let parser str =
@@ -86,10 +88,13 @@ let cmd_checkSession env =
 let cmd_login env =
   let login common email password =
     interactive_request Endpoints.login_request () { API.email; password } @@
-    fun token -> token
+    fun token ->
+    Persist.set_email_password env.Common.e_persist email password;
+    Persist.set_session env.Common.e_persist token;
+    token
   in
   let doc = "Log into the service" in
-  Term.(pure (lwt3 login) $ common_opts_t env $ username_t $ password_t),
+  Term.(pure (lwt3 login) $ common_opts_t env $ username_t env.Common.e_persist $ password_t env.Common.e_persist),
   Term.info "login" ~doc
 
 let cmd_list env =
@@ -107,11 +112,13 @@ let main () =
     cmd_login;
     cmd_list;
   ] in
-  let env = `Environment in
+  let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)
   with
   | `Error _ -> exit 1
-  | _        -> exit 0
+  | _        ->
+    Persist.save_persist env.Common.e_persist;
+    exit 0
 
 let _ =
   if not !(Sys.interactive) then
