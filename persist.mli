@@ -12,5 +12,5 @@ val get_email_password : t -> (API.email * API.password) option
 val set_session : t -> API.session_token -> unit
 val get_session : t -> API.session_token option
 
-val set_cache_server : t -> API.host -> unit
-val get_cache_server : t -> API.host option
+val set_cache_servers : t -> API.speedtests -> unit
+val get_cache_servers : t -> API.speedtests

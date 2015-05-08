@@ -50,9 +50,17 @@ let quality_t =
   let doc = "Quality for download. This is required." in
   Arg.(required & opt (some string) None & info ["q"; "quality"] ~doc)
 
-let cache_server_t =
+let best_cache persist =
+  match
+    Persist.get_cache_servers persist |>
+    List.sort (fun (_, a) (_, b) -> compare b.API.mbit a.API.mbit)
+  with
+  | (fastest, _)::_ -> Some fastest
+  | _ -> None
+
+let cache_server_t persist =
   let doc = "Cache server for download. This is required." in
-  Arg.(required & opt (some string) None & info ["c"; "cache"] ~doc)
+  Arg.(required & opt (some string) (best_cache persist) & info ["c"; "cache"] ~doc)
 
 let datetime : float Cmdliner.Arg.converter =
   let parser str =
@@ -113,6 +121,21 @@ let cmd_login env =
   Term.(pure (lwt3 login) $ common_opts_t env $ username_t env.Common.e_persist $ password_t env.Common.e_persist),
   Term.info "login" ~doc
 
+let cmd_settings env =
+  let settings common =
+    interactive_request Endpoints.user_settings_request common.Common.c_session () @@
+    fun settings ->
+    List.iter
+      (function
+        | API.Speedtests speedtests -> Persist.set_cache_servers env.Common.e_persist speedtests
+        | Other _ -> ())
+      settings;
+    API.show_user_settings_response settings
+  in
+  let doc = "Retrieve settings" in
+  Term.(pure (lwt1 settings) $ common_opts_t env),
+  Term.info "settings" ~doc
+
 let cmd_list env =
   let range common from_ to_ =
     interactive_request Endpoints.range_request common.Common.c_session { API.from_; to_ } @@
@@ -169,7 +192,7 @@ let cmd_url env =
       return ()
   in
   let doc = "Retrieve the URL of a program" in
-  Term.(pure (lwt5 url) $ common_opts_t env $ cache_server_t $ pid_t $ format_t $ quality_t),
+  Term.(pure (lwt5 url) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
   Term.info "url" ~doc
   
 
@@ -189,6 +212,7 @@ let main () =
   let subcommands = [
     cmd_checkSession;
     cmd_login;
+    cmd_settings;
     cmd_list;
     cmd_cache;
     cmd_epg_info;

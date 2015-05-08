@@ -41,9 +41,16 @@ let save_persist t =
     let fmt = Format.formatter_of_out_channel file in
     Toml.Printer.table fmt !(t.t_toml)
 
-let set_string t key value =
-  t.t_toml := Toml.Table.add (Toml.key key) (Toml.Value.Of.string value) !(t.t_toml);
+let set_value t key value =
+  t.t_toml := Toml.Table.add (Toml.key key) value !(t.t_toml);
   t.t_changed := true
+
+let set_string t key value =
+  set_value t key (Toml.Value.Of.string value)
+
+let get_table t key =
+  try Some (Toml.get_table (Toml.key key) !(t.t_toml))
+  with Not_found -> None
 
 let get_string t key =
   try Some (Toml.get_string (Toml.key key) !(t.t_toml))
@@ -63,6 +70,32 @@ let get_email_password t =
 
 let get_session t = get_string t "session"
 
-let set_cache_server t cache_server = set_string t "cache_server" cache_server
+let set_cache_servers t cache_servers =
+  let (_, table) =
+    List.fold_left
+      (fun (count, table) (server, speedtest) ->
+         let entry =
+           Toml.Table.empty |>
+           Toml.Table.add (Toml.key "host") (Toml.Value.Of.string server) |>
+           Toml.Table.add (Toml.key "mbit") (Toml.Value.Of.float speedtest.API.mbit)
+         in
+         (count + 1, Toml.Table.add (Toml.key (Printf.sprintf "server%d" count)) (Toml.Value.Of.table entry) table)
+      )
+      (1, Toml.Table.empty)
+      cache_servers
+  in
+  set_value t "caches" (Toml.Value.Of.table table)
 
-let get_cache_server t = get_string t "cache_server"
+let get_cache_servers t =
+  match get_table t "caches" with
+  | None -> []
+  | Some caches ->
+    (* TODO: not handling exceptions.. of course, we never read broken configuration! *)
+    Toml.Table.fold
+      (fun _ (info : Toml.Value.value) caches ->
+         let host = Toml.get_string (Toml.key "host") (Toml.Value.To.table info) in
+         let mbit = Toml.get_float (Toml.key "mbit") (Toml.Value.To.table info) in
+         (host, { API.mbit = mbit; length = 0.0; })::caches
+      )
+      caches
+      []

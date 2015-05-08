@@ -162,3 +162,27 @@ type epg_info_request = {
 } [@@deriving to_yojson]
 
 type epg_info_response = vod [@@deriving show, of_yojson { strict = false }]
+
+type speedtest = {
+  mbit : float;
+  length : float;
+} [@@deriving show, of_yojson { strict = false }]
+
+type speedtests = (host * speedtest) list  [@@deriving show]
+let speedtests_of_yojson = Tools.assoc_of_yojson speedtest_of_yojson "API.speedtests_of_yojson"
+
+type user_setting = Speedtests of speedtests | Other of (string * Tools.json) [@@deriving show]
+let user_setting_of_yojson = function
+  | `Assoc (kvs : (string * Tools.json) list) -> (
+      let setting = BatList.Exceptionless.assoc "setting" kvs in
+      let value = BatList.Exceptionless.assoc "value" kvs in
+      match setting, value with
+      | Some (`String "speedtests"), Some ((`Assoc _) as value) ->
+        Tools.map_of_yojson (fun v -> `Ok (Speedtests v)) speedtests_of_yojson value
+      | Some (`String setting), Some value ->
+        `Ok (Other (setting, value))
+      | _ -> `Error "API.user_setting"
+    )
+  | other -> `Error "API.user_setting"
+
+type user_settings_response = user_setting list [@@deriving show, of_yojson]
