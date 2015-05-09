@@ -67,7 +67,7 @@ let best_cache persist =
 
 let cache_server_t persist =
   let doc = "Cache server for download. This is required." in
-  req_optional Arg.string (best_cache persist) (Arg.info ["c"; "cache"] ~docv:"SERVER" ~doc)
+  req_optional Arg.string (best_cache persist) (Arg.info ["cache"] ~docv:"SERVER" ~doc)
 
 let datetime : float Cmdliner.Arg.converter =
   let parser str =
@@ -96,6 +96,10 @@ let load_file_t =
   let doc = "Load data to process from the give file" in
   Arg.(value & opt (some string) None & info ["l"; "load"] ~docv:"FILE" ~doc)
 
+let channels_t =
+  let doc = "Limit to this channel" in
+  Arg.(value & opt_all string [] & info ["c"; "channel"] ~docv:"CHANNEL" ~doc)
+
 let help_subcommands = [
   `S "COMMON OPTIONS";
   `P "These options are common to all commands.";
@@ -114,6 +118,10 @@ let lwt2 f a b = Lwt_unix.run (f a b)
 let lwt3 f a b c = Lwt_unix.run (f a b c)
 let lwt4 f a b c d = Lwt_unix.run (f a b c d)
 let lwt5 f a b c d e = Lwt_unix.run (f a b c d e)
+let lwt6 f a b c d e g = Lwt_unix.run (f a b c d e g)
+let lwt7 f a b c d e g h = Lwt_unix.run (f a b c d e g h)
+let lwt8 f a b c d e g h i = Lwt_unix.run (f a b c d e g h i)
+let lwt9 f a b c d e g h i j = Lwt_unix.run (f a b c d e g h i j)
 
 let cmd_checkSession env =
   let checkSession common =
@@ -249,7 +257,7 @@ let output_program_table (input : (string * API.vod list) list) =
   ()
 
 let cmd_list env =
-  let range common from_ to_ load_file save_file =
+  let range common from_ to_ load_file save_file channels =
     match load_file, from_, to_ with
     | None, Some from_, Some to_ -> (
         interactive_request Endpoints.range_request common.Common.c_session { API.from_; to_ } @@
@@ -266,7 +274,13 @@ let cmd_list env =
         let input = File.with_file_in file IO.read_all |> Yojson.Safe.from_string |> API.range_response_of_yojson in
         ( match input with
           | `Error error -> Printf.printf "Failed to load response: %s\n" error
-          | `Ok input -> output_program_table input
+          | `Ok input ->
+            let input =
+              if channels = []
+              then input
+              else List.filter (fun (channel, _) -> List.mem channel channels) input
+            in
+            output_program_table input
         );
         return ()
       )
@@ -275,7 +289,7 @@ let cmd_list env =
       return ()
   in
   let doc = "List vods from given time range" in
-  Term.(pure (lwt5 range) $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t),
+  Term.(pure (lwt6 range) $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t $ channels_t),
   Term.info "list" ~doc
 
 let cmd_cache env =
