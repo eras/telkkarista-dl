@@ -117,15 +117,11 @@ type channel = string [@@deriving show, of_yojson]
 
 type programs = vod list [@@deriving show, of_yojson]
 
-type range_single_response = (channel * programs)
+type range_single_response = (channel * programs) [@@deriving show]
 
-type range_response = range_single_response list
+type range_response = range_single_response list [@@deriving show]
 
 let range_response_of_yojson = Tools.assoc_of_yojson programs_of_yojson "range response"
-
-let show_range_response (range_response : range_response) =
-  String.concat ", " @@
-  List.map (fun (channel, programs) -> show_channel channel ^ ": " ^ show_programs programs) range_response
 
 type host = string [@@deriving show, of_yojson]
 
