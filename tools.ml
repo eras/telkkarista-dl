@@ -28,6 +28,12 @@ let assoc_of_yojson f error (json : Yojson.Safe.json) =
       | errors -> `Error (Printf.sprintf "Error when expecting associative table for %s: %s" error (String.concat " & " errors)) )
   | _ -> `Error (Printf.sprintf "Expected associative table for %s but got %s" error (Yojson.Safe.to_string json))
 
+let assoc_to_yojson f xs =
+  `Assoc (
+    xs |> List.map @@ fun (k, v) ->
+    ((k : string), f v)
+  )
+
 type json = Yojson.Safe.json
 
 let pp_json fmt json = Format.fprintf fmt "%s" (Yojson.Safe.to_string json)
