@@ -256,6 +256,15 @@ let output_program_table (input : (string * API.vod list) list) =
   (* Printf.printf "%s" (Simple.to_string channels_box); *)
   ()
 
+let output_program_list input =
+  input |> List.iter @@ fun (channel, vods) ->
+  Printf.printf "%s:\n" channel;
+  vods |> List.iter @@ fun vod ->
+  Printf.printf "  %s %s %s\n"
+    (ISO8601.Permissive.string_of_datetime vod.API.start)
+    (Option.default "???" vod.API.pid)
+    (Option.default "???" (title_for vod))
+
 let cmd_list env =
   let range common from_ to_ load_file save_file channels =
     match load_file, from_, to_ with
@@ -280,7 +289,7 @@ let cmd_list env =
               then input
               else List.filter (fun (channel, _) -> List.mem channel channels) input
             in
-            output_program_table input
+            output_program_list input
         );
         return ()
       )
