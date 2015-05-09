@@ -71,19 +71,21 @@ type range_request = {
   to_ [@key "to"]     : timestamp;
 } [@@deriving show,to_yojson]
 
-type quality = string [@@deriving show, of_yojson]
+type quality = string [@@deriving show, yojson]
 
-type qualities = quality list [@@deriving show, of_yojson]
+type qualities = quality list [@@deriving show, yojson]
 
 type download_formats = (string * qualities) list [@@deriving show]
 let download_formats_of_yojson = Tools.assoc_of_yojson qualities_of_yojson "API.download_formats"
+let download_formats_to_yojson = Tools.assoc_to_yojson qualities_to_yojson
 
-type language = string [@@deriving show, of_yojson]
-type title = string [@@deriving show, of_yojson]
+type language = string [@@deriving show, yojson]
+type title = string [@@deriving show, yojson]
 
 type language_titles = (language * title) list [@@deriving show]
 
 let language_titles_of_yojson = Tools.assoc_of_yojson title_of_yojson "API.title_of_yojson"
+let language_titles_to_yojson = Tools.assoc_to_yojson title_to_yojson
   
 type pid = string [@@deriving show, yojson]
 
@@ -100,6 +102,12 @@ let record_state_of_yojson = function
   | `String "recording" -> `Ok `Recording
   | _ -> `Error "API.record_state"
 
+let record_state_to_yojson = function
+  | `Storage -> `String "storage"
+  | `Pending -> `String "pending"
+  | `Recording -> `String "recording"
+  | `None -> `String "none"
+
 type vod = {
   start         : timestamp;
   stop          : timestamp; (* "2015-04-30T21:30:00.000Z" *)
@@ -111,17 +119,18 @@ type vod = {
   pid           : pid option [@default None];
   recordpath    : string option [@default None];
   downloadFormats: download_formats [@default []];
-} [@@deriving show, of_yojson { strict = false }]
+} [@@deriving show, of_yojson { strict = false }, to_yojson]
 
 type channel = string [@@deriving show, of_yojson]
 
-type programs = vod list [@@deriving show, of_yojson]
+type programs = vod list [@@deriving show, yojson]
 
 type range_single_response = (channel * programs) [@@deriving show]
 
 type range_response = range_single_response list [@@deriving show]
 
 let range_response_of_yojson = Tools.assoc_of_yojson programs_of_yojson "range response"
+let range_response_to_yojson = Tools.assoc_to_yojson programs_to_yojson
 
 type host = string [@@deriving show, of_yojson]
 
