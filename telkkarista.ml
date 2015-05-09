@@ -1,4 +1,6 @@
+module Text' = Text
 open Batteries
+module Text = Text'
 open Lwt.Infix
 open Cmdliner
 
@@ -80,11 +82,19 @@ let datetime : float Cmdliner.Arg.converter =
 
 let begin_t =
   let doc = "Begin time stamp of the range." in
-  Arg.(required & opt (some datetime) None & info ["b"; "begin"] ~docv:"ISO8601 TIME" ~doc)
+  Arg.(value & opt (some datetime) None & info ["b"; "begin"] ~docv:"ISO8601 TIME" ~doc)
 
 let end_t =
   let doc = "End time stamp of the range." in
-  Arg.(required & opt (some datetime) None & info ["e"; "end"] ~docv:"ISO8601 TIME" ~doc)
+  Arg.(value & opt (some datetime) None & info ["e"; "end"] ~docv:"ISO8601 TIME" ~doc)
+
+let save_file_t =
+  let doc = "Save results as to the given file." in
+  Arg.(value & opt (some string) None & info ["s"; "save"] ~docv:"FILE" ~doc)
+
+let load_file_t =
+  let doc = "Load data to process from the give file" in
+  Arg.(value & opt (some string) None & info ["l"; "load"] ~docv:"FILE" ~doc)
 
 let help_subcommands = [
   `S "COMMON OPTIONS";
@@ -141,13 +151,131 @@ let cmd_settings env =
   Term.(pure (lwt1 settings) $ common_opts_t env),
   Term.info "settings" ~doc
 
-let cmd_list env =
-  let range common from_ to_ =
-    interactive_request Endpoints.range_request common.Common.c_session { API.from_; to_ } @@
-    fun response -> API.show_range_response response
+module TimeMap = Map.Make (struct type t = float let compare = compare end)
+module ChannelMap = Map.Make (struct type t = API.channel let compare = compare end)
+
+let language_preference = ["fi"; "sv"]
+
+let compare_by f a b = compare (f a) (f b)
+
+let title_for vod =
+  let titles = vod.API.title in
+  let index_of_language x =
+    try fst @@ List.findi (fun _ language -> x = language) language_preference
+    with Not_found -> List.length language_preference
   in
-  let doc = "List programs from given time range" in
-  Term.(pure (lwt3 range) $ common_opts_t env $ begin_t $ end_t),
+  match List.sort (compare_by (index_of_language % fst)) titles with
+  | (_, preferred)::_ -> Some preferred
+  | [] -> None
+
+let split_string_to_chunks len str =
+  let rec loop index strs =
+    if index < Text.length str then
+      let end_point = min (index + len) (Text.length str) in
+      let len' = (end_point - index) in
+      (* Printf.printf "%s %d %d\n" str index len'; *)
+      loop
+        end_point
+        (if len' > 0
+         then Text.sub str index len'::strs
+         else strs)
+    else
+      List.rev strs
+  in
+  loop 0 []
+
+let output_program_table (input : (string * API.vod list) list) =
+  let open Containers_misc.PrintBox in
+  set_string_len Text.length;
+  let channels = List.map fst input in
+  let vods = List.concat @@ List.map snd input in
+  let begins = List.map (fun vod -> vod.API.start) vods |> List.sort compare |> List.unique in
+  let programs_by_channel_and_begin =
+    List.fold_left (
+      fun channel_map (channel, vods) ->
+        let time_map = List.fold_left (fun time_map vod -> TimeMap.add vod.API.start vod time_map) TimeMap.empty vods in
+        ChannelMap.add channel time_map channel_map
+    ) ChannelMap.empty input
+  in
+  (* let ends = List.map (fun vod -> vod.API.stop) vods |> List.sort compare |> List.unique  in *)
+  let last_index = List.length begins + 1 + 4 in
+  let table = Array.make_matrix last_index (List.length channels + 1) empty in
+  let _ = List.fold_left (fun i channel -> table.(0).(i) <- text @@ channel ^ " "; (i + 1)) 1 channels in
+  let _ = List.fold_left (fun i time ->
+      table.(i + 1).(0) <- text (ISO8601.Permissive.string_of_datetime time ^ " ");
+      List.fold_left (fun x channel ->
+          ( match ChannelMap.find channel programs_by_channel_and_begin |> TimeMap.find time with
+            | exception Not_found -> ()
+            | vod ->
+              let next_time =
+                try Some (
+                    let (_, _, following) = ChannelMap.find channel programs_by_channel_and_begin |> TimeMap.split time in
+                    fst (TimeMap.min_binding following)
+                  )
+                with Not_found -> None
+              in
+              let next_index =
+                match next_time with
+                | None -> last_index - 1
+                | Some next_time ->
+                  try fst @@ List.findi (fun _ time -> time = next_time) begins
+                  with Not_found -> last_index - 1
+              in
+              let vertical_space = min 5 (next_index - i) in
+              let title =
+                match title_for vod, vod.API.pid with
+                | None, None -> "???"
+                | None, Some pid -> pid
+                | Some title, _ -> title
+              in
+              let title = "* " ^ title in
+              let part_length = max 5 ((Text.length title + vertical_space - 1) / vertical_space) in
+              let parts = split_string_to_chunks part_length title in
+              List.fold_left
+                (fun part_index part ->
+                   table.(i + 1 + part_index).(x) <- text part;
+                   (part_index + 1)
+                ) 0 parts |> ignore
+          );
+          (x + 1)
+        ) 1 channels |> ignore;
+      (i + 1)
+    ) 0 begins in
+  let channels_box = `Hlist (`Empty::List.map (fun ch -> `Text ch) channels) in
+  (* let box = `Vlist (channels_box :: List.map (fun time -> `Text (ISO8601.Permissive.string_of_datetime time)) begins) in *)
+  let grid_box = grid ~bars:false table in
+  Printf.printf "%s" (to_string grid_box);
+  (* Printf.printf "%s" (Simple.to_string channels_box); *)
+  ()
+
+let cmd_list env =
+  let range common from_ to_ load_file save_file =
+    match load_file, from_, to_ with
+    | None, Some from_, Some to_ -> (
+        interactive_request Endpoints.range_request common.Common.c_session { API.from_; to_ } @@
+        fun response ->
+        ( match save_file with
+          | None -> ()
+          | Some file ->
+            File.with_file_out file @@ fun io ->
+            Printf.fprintf io "%s" (API.range_response_to_yojson response |> Yojson.Safe.pretty_to_string)
+        );
+        API.show_range_response response
+      )
+    | Some file, None, None -> (
+        let input = File.with_file_in file IO.read_all |> Yojson.Safe.from_string |> API.range_response_of_yojson in
+        ( match input with
+          | `Error error -> Printf.printf "Failed to load response: %s\n" error
+          | `Ok input -> output_program_table input
+        );
+        return ()
+      )
+    | _, _, _ ->
+      Printf.printf "Need to provide either time range or --load\n";
+      return ()
+  in
+  let doc = "List vods from given time range" in
+  Term.(pure (lwt5 range) $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t),
   Term.info "list" ~doc
 
 let cmd_cache env =

@@ -8,5 +8,7 @@ PKG yojson
 PKG ISO8601
 PKG netstring
 PKG toml
+PKG containers.misc
+PKG text
 FLG -w -40
 
