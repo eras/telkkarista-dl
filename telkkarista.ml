@@ -26,29 +26,34 @@ let common_opts_t env =
   let docs = "COMMON OPTIONS" in 
   let session = 
     let doc = "Set session id" in
-    Arg.(value & opt string (Option.default "" (Persist.get_session env.Common.e_persist)) & info ["s"; "session"] ~docs ~doc)
+    Arg.(value & opt string (Option.default "" (Persist.get_session env.Common.e_persist)) & info ["s"; "session"] ~docv:"TOKEN" ~docs ~doc)
   in
   Term.(pure (common_opts env) $ session)
 
+let req_optional kind default info_ =
+  match default with
+  | None -> Arg.(required & opt (some kind) None & info_)
+  | Some default -> Arg.(value & opt kind default & info_)
+
 let username_t persist =
   let doc = "User name (email). This is required." in
-  Arg.(required & opt (some string) (Option.map fst (Persist.get_email_password persist)) & info ["u"; "user"] ~doc)
+  req_optional Arg.string (Option.map fst (Persist.get_email_password persist)) (Arg.info ["u"; "user"] ~docv:"EMAIL" ~doc)
 
 let password_t persist =
   let doc = "Password. This is required." in
-  Arg.(required & opt (some string) (Option.map snd (Persist.get_email_password persist)) & info ["p"; "pass"] ~doc)
+  req_optional Arg.string (Option.map snd (Persist.get_email_password persist)) (Arg.info ["p"; "pass"] ~docv:"PASSWORD" ~doc)
 
 let pid_t =
   let doc = "Program ID. This is required." in
-  Arg.(required & opt (some string) None & info ["p"; "pid"] ~doc)
+  req_optional Arg.string None (Arg.info ["p"; "pid"] ~docv:"PID" ~doc)
 
 let format_t =
   let doc = "Format for download. This is required." in
-  Arg.(required & opt (some string) None & info ["f"; "format"] ~doc)
+  req_optional Arg.string None (Arg.info ["f"; "format"] ~docv:"FORMAT" ~doc)
 
 let quality_t =
   let doc = "Quality for download. This is required." in
-  Arg.(required & opt (some string) None & info ["q"; "quality"] ~doc)
+  req_optional Arg.string None (Arg.info ["q"; "quality"] ~docv:"QUALITY" ~doc)
 
 let best_cache persist =
   match
@@ -60,7 +65,7 @@ let best_cache persist =
 
 let cache_server_t persist =
   let doc = "Cache server for download. This is required." in
-  Arg.(required & opt (some string) (best_cache persist) & info ["c"; "cache"] ~doc)
+  req_optional Arg.string (best_cache persist) (Arg.info ["c"; "cache"] ~docv:"SERVER" ~doc)
 
 let datetime : float Cmdliner.Arg.converter =
   let parser str =
@@ -75,11 +80,11 @@ let datetime : float Cmdliner.Arg.converter =
 
 let begin_t =
   let doc = "Begin time stamp of the range." in
-  Arg.(required & opt (some datetime) None & info ["b"; "begin"] ~doc)
+  Arg.(required & opt (some datetime) None & info ["b"; "begin"] ~docv:"ISO8601 TIME" ~doc)
 
 let end_t =
   let doc = "End time stamp of the range." in
-  Arg.(required & opt (some datetime) None & info ["e"; "end"] ~doc)
+  Arg.(required & opt (some datetime) None & info ["e"; "end"] ~docv:"ISO8601 TIME" ~doc)
 
 let help_subcommands = [
   `S "COMMON OPTIONS";
