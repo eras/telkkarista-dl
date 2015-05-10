@@ -162,6 +162,9 @@ let help_subcommands = [
   `P "$(b,% $(mname) list --load results.json -n judge)";
   `P "To find out the download URL of a program, use $(b,$(mname) url):";
   `P "$(b,% $(mname) url --pid 554e2bbbe3398c93fe916428)";
+  `P "To download a program, or programs directly:";
+  `P "$(b,% $(mname) download 554e2bbbe3398c93fe916428 557e2bbbe3398c93fe916795)";
+  `P "Files will be named after the programs.";
   `S "FILES";
   `P "$(b,~/.config/telkkarista/session) or $(qb,~/.telkkarista/session) contain the current effective configuration.";
   `S "ENVIRONMENT";
