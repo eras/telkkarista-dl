@@ -351,41 +351,44 @@ let cmd_vod_url env =
   Term.(pure (lwt2 vod_url) $ common_opts_t env $ pid_t),
   Term.info "vod-url" ~doc
 
+let vod_url session cache_server pid format quality =
+  match%lwt Endpoints.epg_info_request session { API.pid } with
+  | None -> return None
+  | Some ({ recordpath = Some recordpath } as info) -> (
+      let filter_by_format format = List.filter (fun (f, _) -> f = format) in
+      let filter_by_quality quality = List.filter (fun (_, q) -> q = quality) in
+      let preference =
+        match format, quality with
+        | None, None -> format_quality_preference
+        | Some format, None -> filter_by_format format format_quality_preference
+        | None, Some quality -> filter_by_quality quality format_quality_preference
+        | Some format, Some quality -> filter_by_quality quality format_quality_preference |> filter_by_format format
+      in
+      match format_quality_for preference info with
+      | None ->
+        (* Printf.printf "Sorry, there is no match for required format/quality\n%!"; *)
+        return None
+      | Some (format, quality) ->
+        let title = Option.default "file" @@ title_for info in
+        let title = Re.replace_string (Re.compile @@ Re_pcre.re "[/ ]") ~by:"_" title in
+        return @@ Endpoints.download_url cache_server session format quality info title
+    )
+  | Some _ -> return None
+
 let cmd_url env =
   let url common cache_server pid format quality =
-    match%lwt Endpoints.epg_info_request common.Common.c_session { API.pid } with
+    match%lwt vod_url common.Common.c_session cache_server pid format quality with
     | None ->
-      Printf.printf "Sorry, no such programm id could be found\n";
+      Printf.printf "Sorry, no such programm id could be found\n%!";
       return ()
-    | Some ({ recordpath = Some recordpath } as info) -> (
-        let filter_by_format format = List.filter (fun (f, _) -> f = format) in
-        let filter_by_quality quality = List.filter (fun (_, q) -> q = quality) in
-        let preference =
-          match format, quality with
-          | None, None -> format_quality_preference
-          | Some format, None -> filter_by_format format format_quality_preference
-          | None, Some quality -> filter_by_quality quality format_quality_preference
-          | Some format, Some quality -> filter_by_quality quality format_quality_preference |> filter_by_format format
-        in
-        match format_quality_for preference info with
-        | None ->
-          Printf.printf "Sorry, there is no match for required format/quality\n%!";
-          return ()
-        | Some (format, quality) ->
-          let title = Option.default "file" @@ title_for info in
-          let title = Re.replace_string (Re.compile @@ Re_pcre.re "[/ ]") ~by:"_" title in
-          let url = Endpoints.download_url cache_server common.Common.c_session format quality info title in
-          Printf.printf "%s\n%!" (Option.default "not available" url);
-          return ()
-      )
-    | Some _ ->
-      Printf.printf "Sorry, no recording for the program id could be found\n";
+    | Some url ->
+      Printf.printf "%s\n%!" url;
       return ()
   in
   let doc = "Retrieve the URL of a program" in
   Term.(pure (lwt5 url) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
   Term.info "url" ~doc
-  
+
 
 let cmd_epg_info env =
   let epg_info common pid =
