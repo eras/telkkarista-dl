@@ -65,11 +65,11 @@ let req_optional kind default info_ =
   | Some default -> Arg.(value & opt kind default & info_)
 
 let username_t persist =
-  let doc = "User name (email). This is required." in
+  let doc = "User name (email)." in
   req_optional Arg.string (Option.map fst (Persist.get_email_password persist)) (Arg.info ["u"; "user"] ~docv:"EMAIL" ~doc)
 
 let password_t persist =
-  let doc = "Password. This is required." in
+  let doc = "Password." in
   req_optional Arg.string (Option.map snd (Persist.get_email_password persist)) (Arg.info ["p"; "pass"] ~docv:"PASSWORD" ~doc)
 
 let pid_t =
@@ -81,11 +81,11 @@ let pids_t =
   Arg.(value & pos_all string [] & Arg.info [] ~docv:"PID" ~doc)
 
 let format_t =
-  let doc = "Format for download. This is required." in
+  let doc = "Format for download." in
   Arg.(value & opt (some string) None & (Arg.info ["f"; "format"] ~docv:"FORMAT" ~doc))
 
 let quality_t =
-  let doc = "Quality for download. This is required." in
+  let doc = "Quality for download." in
   Arg.(value & opt (some string) None & (Arg.info ["q"; "quality"] ~docv:"QUALITY" ~doc))
 
 let best_cache persist =
@@ -97,7 +97,7 @@ let best_cache persist =
   | _ -> None
 
 let cache_server_t persist =
-  let doc = "Cache server for download. This is required." in
+  let doc = "Cache server for download." in
   req_optional Arg.string (best_cache persist) (Arg.info ["cache"] ~docv:"SERVER" ~doc)
 
 let datetime : float Cmdliner.Arg.converter =
