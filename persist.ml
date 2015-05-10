@@ -14,7 +14,10 @@ let config_base =
     try Sys.getenv "HOME"
     with Not_found -> failwith "HOME environment variable is not set"
   in
-  let has_dot_config = Sys.is_directory @@ home ^/ ".config" in
+  let has_dot_config =
+    let file = home ^/ ".config" in
+    Sys.file_exists file && Sys.is_directory file
+  in
   let base =
     (if has_dot_config
      then home ^/ ".config"
