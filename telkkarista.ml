@@ -276,9 +276,13 @@ let output_program_list input =
   input |> List.iter @@ fun (channel, vods) ->
   Printf.printf "%s:\n" channel;
   vods |> List.iter @@ fun vod ->
-  Printf.printf "  %s %s %s\n"
+  Printf.printf "  %s %s [%s] %s\n"
     (ISO8601.Permissive.string_of_datetime vod.API.start)
     (Option.default "???" vod.API.pid)
+    (if vod.API.downloadFormats <> []
+     then "OK"
+     else "--"
+    )
     (Option.default "???" (title_for vod))
 
 let cmd_list env =
