@@ -1,5 +1,6 @@
 type 'session update_session = unit -> 'session Lwt.t
-type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> 'response option Lwt.t
+type 'a value = Ok of 'a | Invalid_response | Error of string
+type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> 'response value Lwt.t
     
 val version : int
 val debug : bool

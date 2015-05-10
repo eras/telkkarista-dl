@@ -18,10 +18,10 @@ let renegotiate_session : Common.common -> _ Endpoints.update_session = fun comm
     )
   | Some (email, password) -> (fun () ->
       match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
-      | None ->
+      | Endpoints.Error _ | Endpoints.Invalid_response ->
         Printf.printf "Failed to acquire token\n%!";
         assert false
-      | Some token ->
+      | Endpoints.Ok token ->
         Persist.set_session env.Common.e_persist token;
         return token
     )
@@ -39,10 +39,13 @@ let interactive_single_shot endpoint session arg show =
 let interactive_request (common : Common.common) (endpoint : (_, _, _) Endpoints.result) session arg show =
   let%lwt response = endpoint session (renegotiate_session common) arg in
   match response with
-  | None ->
-    Printf.printf "There was an error\n%!";
+  | Endpoints.Error error ->
+    Printf.printf "Error: %s\n%!" error;
     return ()
-  | Some response ->
+  | Endpoints.Invalid_response ->
+    Printf.printf "Invalid response\n%!";
+    return ()
+  | Endpoints.Ok response ->
     Printf.printf "%s\n%!" (show response);
     return ()
 
@@ -191,18 +194,22 @@ let update_persisted_settings env settings =
 let cmd_login env =
   let login common email password =
     match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
-    | None ->
-      Printf.printf "Failed to log in\n";
+    | Endpoints.Invalid_response ->
+      Printf.printf "Failed to log in: invalid response\n";
       return ()
-    | Some token ->
+    | Endpoints.Error error ->
+      Printf.printf "Failed to log in: %s\n" error;
+      return ()
+    | Endpoints.Ok token ->
       Printf.printf "Logged in\n%!";
       Persist.set_email_password env.Common.e_persist email password;
       Persist.set_session env.Common.e_persist token;
       let%lwt () = match%lwt Endpoints.user_settings token (renegotiate_session common) () with
-        | None ->
+        | Endpoints.Invalid_response
+        | Endpoints.Error _ ->
           Printf.printf "Failed to retrieve settings\n%!";
           return ()
-        | Some settings ->
+        | Endpoints.Ok settings ->
           update_persisted_settings env settings;
           return ()
       in
@@ -403,10 +410,13 @@ let cmd_list env =
       match load_file, from_, to_ with
       | None, Some from_, Some to_ -> (
           match%lwt Endpoints.epg_range common.Common.c_session (renegotiate_session common) { API.from_; to_ } with
-          | None ->
-            Printf.printf "Failed to receive response\n%!";
+          | Endpoints.Invalid_response ->
+            Printf.printf "Failed to receive response (invalid response)\n%!";
             return None
-          | Some response ->
+          | Endpoints.Error error ->
+            Printf.printf "Failed to receive response: %s\n%!" error;
+            return None
+          | Endpoints.Ok response ->
             return (Some response)
         )
       | Some file, None, None -> (
@@ -457,10 +467,13 @@ let cmd_cache env =
 let cmd_vod_url env =
   let vod_url common pid =
     match%lwt Endpoints.epg_info common.Common.c_session (renegotiate_session common) { API.pid } with
-    | None ->
-      Printf.printf "Sorry, no such programm id could be found\n";
+    | Endpoints.Invalid_response ->
+      Printf.printf "Invalid response from the server\n";
       return ()
-    | Some ({ recordpath = Some recordpath }) ->
+    | Endpoints.Error error ->
+      Printf.printf "Sorry, no such programm id could be found: %s\n" error;
+      return ()
+    | Endpoints.Ok ({ recordpath = Some recordpath }) ->
       let request = {
         API.pid;
         path = recordpath;
@@ -468,7 +481,7 @@ let cmd_vod_url env =
       } in
       interactive_request common Endpoints.client_vod_getUrl common.Common.c_session request @@
       fun response -> API.show_json_response response
-    | Some _ ->
+    | Endpoints.Ok _ ->
       Printf.printf "Sorry, no recording for the program id could be found\n";
       return ()
   in
@@ -478,8 +491,13 @@ let cmd_vod_url env =
 
 let vod_url common session cache_server pid format quality =
   match%lwt Endpoints.epg_info session (renegotiate_session common) { API.pid } with
-  | None -> return None
-  | Some ({ recordpath = Some recordpath } as info) -> (
+  | Endpoints.Error error ->
+    Printf.eprintf "Error: %s\n%!" error;
+    return None
+  | Endpoints.Invalid_response ->
+    Printf.eprintf "Invalid response\n%!";
+    return None
+  | Endpoints.Ok ({ recordpath = Some recordpath } as info) -> (
       let filter_by_format format = List.filter (fun (f, _) -> f = format) in
       let filter_by_quality quality = List.filter (fun (_, q) -> q = quality) in
       let preference =
@@ -498,7 +516,7 @@ let vod_url common session cache_server pid format quality =
         let title = Re.replace_string (Re.compile @@ Re_pcre.re "[/ ]") ~by:"_" title in
         return @@ Endpoints.download_url cache_server session format quality info title
     )
-  | Some _ -> return None
+  | Endpoints.Ok _ -> return None
 
 let cmd_url env =
   let url common cache_server pid format quality =

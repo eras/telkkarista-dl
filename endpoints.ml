@@ -11,7 +11,8 @@ let (^/) a b = a ^ "/" ^ b
 type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 
 type 'session update_session = unit -> 'session Lwt.t
-type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> 'response option Lwt.t
+type 'a value = Ok of 'a | Invalid_response | Error of string
+type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> 'response value Lwt.t
 
 type ('session, 'request, 'response) request =
   (* GetRequest has no parameters, but does have a response, ie. checkSession *)
@@ -93,14 +94,14 @@ let request (type session) (type request_) (type response) uri (request : (sessi
     (* We failed to decode then JSON; TODO: better error handling *)
     | `Error error ->
       Printf.printf "Failed to convert response due to %s from %s\n%!" error (Yojson.Safe.to_string response);
-      return None
+      return (Error error)
     (* We succeeded in decoding the JSON, but it indicated an error. TODO: better error handling *)
     | `Ok { API.code = code; payload = None } ->
       Printf.printf "Error %s in %s\n%!" code (Yojson.Safe.to_string response);
-      return None
+      return Invalid_response
     (* Everything's awesome! *)
     | `Ok { API.payload = Some payload } ->
-      return (Some payload)
+      return (Ok payload)
   in
   match request with
   | GetRequest json_to_response -> fun session update_session _ ->
