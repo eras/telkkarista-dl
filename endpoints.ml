@@ -30,13 +30,15 @@ let endpoint_uri service = Uri.of_string (base ^/ Printf.sprintf "%d" version ^/
 (* Each request has this header (except PostRequestNoSession) *)
 let session_header session = ["X-SESSION", session]
 
+let debug = try Sys.getenv "TELKKARISTA_DEBUG" = "1" with Not_found -> false
+
 (* Issues a general POST request to the endpoint *)
 let post ~headers ~endpoint ~body =
   Printf.printf "Requesting: %s\n%!" body;
   let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
-  Printf.printf "Response: %s\n%!" body_string;
+  if debug then Printf.printf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
 
 (* Issues a POST request with session id to the endpoint *)
@@ -50,7 +52,7 @@ let get ~session ~endpoint =
   let headers = Cohttp.Header.of_list (session_header session) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
-  Printf.printf "Response: %s\n%!" body_string;
+  if debug then Printf.printf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
 
 (* Construct a request object for the given resource. The return
