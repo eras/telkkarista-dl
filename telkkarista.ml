@@ -76,6 +76,10 @@ let pid_t =
   let doc = "Program ID. This is required." in
   req_optional Arg.string None (Arg.info ["p"; "pid"] ~docv:"PID" ~doc)
 
+let pids_t =
+  let doc = "Program IDs." in
+  Arg.(value & pos_all string [] & Arg.info [] ~docv:"PID" ~doc)
+
 let format_t =
   let doc = "Format for download. This is required." in
   Arg.(value & opt (some string) None & (Arg.info ["f"; "format"] ~docv:"FORMAT" ~doc))
@@ -546,7 +550,8 @@ let download_url url =
   return ()
 
 let cmd_download env =
-  let command common cache_server pid format quality =
+  let command common cache_server pids format quality =
+    pids |> Lwt_list.iter_s @@ fun pid ->
     match%lwt vod_url common common.Common.c_session cache_server pid format quality with
     | None ->
       Printf.printf "Sorry, no such programm id could be found\n%!";
@@ -556,7 +561,7 @@ let cmd_download env =
       download_url (Uri.of_string url)
   in
   let doc = "Retrieve a program" in
-  Term.(pure (lwt5 command) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
+  Term.(pure (lwt5 command) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pids_t $ format_t $ quality_t),
   Term.info "download" ~doc
 
 let cmd_epg_info env =
