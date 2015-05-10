@@ -9,8 +9,6 @@ let version = Version.version
 
 let return = Lwt.return
 
-let don't_renegotiate_session _ = assert false
-
 let renegotiate_session : Common.common -> _ Endpoints.update_session = fun common ->
   let env = common.Common.c_env in
   match Persist.get_email_password common.Common.c_env.Common.e_persist with
@@ -19,7 +17,7 @@ let renegotiate_session : Common.common -> _ Endpoints.update_session = fun comm
       assert false
     )
   | Some (email, password) -> (fun () ->
-      match%lwt Endpoints.user_login () don't_renegotiate_session { API.email; password } with
+      match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
       | None ->
         Printf.printf "Failed to acquire token\n%!";
         assert false
@@ -146,9 +144,7 @@ let help_subcommands = [
   `S "EXAMPLES";
   `P "Log in to the server the first time:";
   `P "$(b,% $(mname) login -u user@name -p password)";
-  `P "This will store used username and password to re-logging in later; plain $(b,$(mname) login) without -u and -p is then sufficient.";
-  `P "Retrieving cache server settings from the server:";
-  `P "$(b,% $(mname) settings)";
+  `P "This will store used username and password for re-logging in later; plain $(b,$(mname) login) without -u and -p is then sufficient.";
   `P "Retrieving list of TV shows:";
   `P "$(b,% $(mname) list -b '2015-01-01T10:00:00' -e '2015-01-01T20:00:00')";
   `P "The program identifier can be used with $(b,info) and $(b,url). To save the list to a file in machine-readable format you may use the switch $(b,--save):";
@@ -192,13 +188,32 @@ let cmd_checkSession env =
   Term.(pure (lwt1 checkSession) $ common_opts_t env),
   Term.info "checkSession" ~doc
 
+let update_persisted_settings env settings =
+  List.iter
+    (function
+      | API.Speedtests speedtests -> Persist.set_cache_servers env.Common.e_persist speedtests
+      | Other _ -> ())
+    settings
+
 let cmd_login env =
   let login common email password =
-    interactive_single_shot Endpoints.user_login () { API.email; password } @@
-    fun token ->
-    Persist.set_email_password env.Common.e_persist email password;
-    Persist.set_session env.Common.e_persist token;
-    token
+    match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
+    | None ->
+      Printf.printf "Failed to log in\n";
+      return ()
+    | Some token ->
+      Printf.printf "Logged in\n%!";
+      Persist.set_email_password env.Common.e_persist email password;
+      Persist.set_session env.Common.e_persist token;
+      let%lwt () = match%lwt Endpoints.user_settings token (renegotiate_session common) () with
+        | None ->
+          Printf.printf "Failed to retrieve settings\n%!";
+          return ()
+        | Some settings ->
+          update_persisted_settings env settings;
+          return ()
+      in
+      return ()
   in
   let doc = "Log into the service" in
   Term.(pure (lwt3 login) $ common_opts_t env $ username_t env.Common.e_persist $ password_t env.Common.e_persist),
@@ -208,11 +223,7 @@ let cmd_settings env =
   let settings common =
     interactive_request common Endpoints.user_settings common.Common.c_session () @@
     fun settings ->
-    List.iter
-      (function
-        | API.Speedtests speedtests -> Persist.set_cache_servers env.Common.e_persist speedtests
-        | Other _ -> ())
-      settings;
+    update_persisted_settings env settings;
     API.show_user_settings_response settings
   in
   let doc = "Retrieve settings" in
