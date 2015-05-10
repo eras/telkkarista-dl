@@ -87,22 +87,16 @@ let request (type session) (type request_) (type response) uri (request : (sessi
     post_with_session ~session ~endpoint:uri ~body >>= handle_response json_to_response
 
 (* let's consider this a special case for how *)
-let login_uri = endpoint_uri "user/login"
-
 let login_request =
   request
     (endpoint_uri "user/login")
     (PostRequestNoSession (API.login_request_to_yojson,
                            API.login_response_of_yojson))
 
-let checkSession = endpoint_uri "user/checkSession"
-
 let checkSession_request =
   request
     (endpoint_uri "user/checkSession")
     (GetRequest (API.checkSession_response_of_yojson))
-
-let range = endpoint_uri "epg/range"
 
 let range_request =
   request
