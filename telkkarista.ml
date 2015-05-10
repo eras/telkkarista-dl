@@ -285,41 +285,54 @@ let output_program_list input =
     )
     (Option.default "???" (title_for vod))
 
+let optionally_filter_channels channels range_response =
+  match channels with
+  | None -> range_response
+  | Some channels -> List.filter (fun (channel, _) -> List.mem channel channels) range_response
+
 let cmd_list env =
   let range common from_ to_ load_file save_file channels =
-    match load_file, from_, to_ with
-    | None, Some from_, Some to_ -> (
-        match%lwt Endpoints.range_request common.Common.c_session { API.from_; to_ } with
-        | None ->
-          Printf.printf "Failed to receive response\n%!";
-          return ()
-        | Some response ->
-          ( match save_file with
-            | None -> ()
-            | Some file ->
-              File.with_file_out file @@ fun io ->
-              Printf.fprintf io "%s" (API.range_response_to_yojson response |> Yojson.Safe.pretty_to_string)
+    let channels =
+      (* ensure there is never an empty channel filter *)
+      match channels with
+      | [] -> None
+      | xs -> Some channels
+    in
+    let%lwt response =
+      match load_file, from_, to_ with
+      | None, Some from_, Some to_ -> (
+          match%lwt Endpoints.range_request common.Common.c_session { API.from_; to_ } with
+          | None ->
+            Printf.printf "Failed to receive response\n%!";
+            return None
+          | Some response ->
+            ( match save_file with
+              | None -> ()
+              | Some file ->
+                File.with_file_out file @@ fun io ->
+                Printf.fprintf io "%s" (API.range_response_to_yojson response |> Yojson.Safe.pretty_to_string)
+            );
+            return (Some response)
+        )
+      | Some file, None, None -> (
+          let input = File.with_file_in file IO.read_all |> Yojson.Safe.from_string |> API.range_response_of_yojson in
+          ( match input with
+            | `Error error ->
+              Printf.printf "Failed to load response: %s\n" error;
+              return None
+            | `Ok input ->
+              return (Some input)
           );
-          (* API.show_range_response response *)
-          output_program_list response;
-          return ()
-      )
-    | Some file, None, None -> (
-        let input = File.with_file_in file IO.read_all |> Yojson.Safe.from_string |> API.range_response_of_yojson in
-        ( match input with
-          | `Error error -> Printf.printf "Failed to load response: %s\n" error
-          | `Ok input ->
-            let input =
-              if channels = []
-              then input
-              else List.filter (fun (channel, _) -> List.mem channel channels) input
-            in
-            output_program_list input
-        );
-        return ()
-      )
-    | _, _, _ ->
-      Printf.printf "Need to provide either time range or --load\n";
+        )
+      | _, _, _ ->
+        Printf.printf "Need to provide either time range or --load\n";
+        return None
+    in
+    match response with
+    | None -> return ()
+    | Some response ->
+      let response = optionally_filter_channels channels response in
+      output_program_list response;
       return ()
   in
   let doc = "List vods from given time range" in
