@@ -51,11 +51,11 @@ let pid_t =
 
 let format_t =
   let doc = "Format for download. This is required." in
-  req_optional Arg.string None (Arg.info ["f"; "format"] ~docv:"FORMAT" ~doc)
+  Arg.(value & opt (some string) None & (Arg.info ["f"; "format"] ~docv:"FORMAT" ~doc))
 
 let quality_t =
   let doc = "Quality for download. This is required." in
-  req_optional Arg.string None (Arg.info ["q"; "quality"] ~docv:"QUALITY" ~doc)
+  Arg.(value & opt (some string) None & (Arg.info ["q"; "quality"] ~docv:"QUALITY" ~doc))
 
 let best_cache persist =
   match
@@ -162,18 +162,31 @@ let cmd_settings env =
 module TimeMap = Map.Make (struct type t = float let compare = compare end)
 module ChannelMap = Map.Make (struct type t = API.channel let compare = compare end)
 
+let format_quality_preference = [("ts", "highest"); ("ts", "hi"); ("mp4", "highest"); ("mp4", "hi")]
+
 let language_preference = ["fi"; "sv"]
 
 let compare_by f a b = compare (f a) (f b)
 
+(* Very slow to use.. *)
+let index_of xs x =
+  try fst @@ List.findi (fun _ y -> x = y) xs
+  with Not_found -> List.length xs
+
 let title_for vod =
   let titles = vod.API.title in
-  let index_of_language x =
-    try fst @@ List.findi (fun _ language -> x = language) language_preference
-    with Not_found -> List.length language_preference
-  in
-  match List.sort (compare_by (index_of_language % fst)) titles with
+  match List.sort (compare_by (index_of language_preference % fst)) titles with
   | (_, preferred)::_ -> Some preferred
+  | [] -> None
+
+let format_quality_for preference vod =
+  let formats =
+    vod.API.downloadFormats
+    |> List.map (fun (format, quality) -> List.map (fun q -> (format, q)) quality)
+    |> List.concat
+  in
+  match List.sort (compare_by (index_of preference)) formats with
+  | preferred::_ -> Some preferred
   | [] -> None
 
 let split_string_to_chunks len str =
@@ -344,10 +357,25 @@ let cmd_url env =
     | None ->
       Printf.printf "Sorry, no such programm id could be found\n";
       return ()
-    | Some ({ recordpath = Some recordpath } as info) ->
-      let url = Endpoints.download_url cache_server common.Common.c_session format quality info "file" in
-      Printf.printf "%s\n%!" (Option.default "not available" url);
-      return ()
+    | Some ({ recordpath = Some recordpath } as info) -> (
+        let filter_by_format format = List.filter (fun (f, _) -> f = format) in
+        let filter_by_quality quality = List.filter (fun (_, q) -> q = quality) in
+        let preference =
+          match format, quality with
+          | None, None -> format_quality_preference
+          | Some format, None -> filter_by_format format format_quality_preference
+          | None, Some quality -> filter_by_quality quality format_quality_preference
+          | Some format, Some quality -> filter_by_quality quality format_quality_preference |> filter_by_format format
+        in
+        match format_quality_for preference info with
+        | None ->
+          Printf.printf "Sorry, there is no match for required format/quality\n%!";
+          return ()
+        | Some (format, quality) ->
+          let url = Endpoints.download_url cache_server common.Common.c_session format quality info "file" in
+          Printf.printf "%s\n%!" (Option.default "not available" url);
+          return ()
+      )
     | Some _ ->
       Printf.printf "Sorry, no recording for the program id could be found\n";
       return ()
