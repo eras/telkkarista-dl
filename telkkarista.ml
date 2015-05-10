@@ -162,7 +162,14 @@ let cmd_settings env =
 module TimeMap = Map.Make (struct type t = float let compare = compare end)
 module ChannelMap = Map.Make (struct type t = API.channel let compare = compare end)
 
-let format_quality_preference = [("ts", "highest"); ("ts", "hi"); ("mp4", "highest"); ("mp4", "hi")]
+let qualities = ["1080p"; "720p"; "highest"; "hi"]
+
+let format_qualities_of_formats formats =
+  formats
+  |> List.map (fun (format, quality) -> List.map (fun q -> (format, q)) quality)
+  |> List.concat
+
+let format_quality_preference = format_qualities_of_formats [("ts", qualities); ("mp4", qualities)]
 
 let language_preference = ["fi"; "sv"]
 
@@ -180,11 +187,7 @@ let title_for vod =
   | [] -> None
 
 let format_quality_for preference vod =
-  let formats =
-    vod.API.downloadFormats
-    |> List.map (fun (format, quality) -> List.map (fun q -> (format, q)) quality)
-    |> List.concat
-  in
+  let formats = format_qualities_of_formats vod.API.downloadFormats in
   match List.sort (compare_by (index_of preference)) formats with
   | preferred::_ -> Some preferred
   | [] -> None
