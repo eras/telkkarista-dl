@@ -577,7 +577,7 @@ let cmd_epg_info env =
   Term.info "info" ~doc
 
 let main () =
-  (* Otherwise downloading is unbearably slow *)
+  (* Otherwise downloading is unbearably slow.. and it still is. *)
   Gc.set { (Gc.get ()) with
            Gc.minor_heap_size = (32 * (1 lsl 20));
            major_heap_increment = 150 };
