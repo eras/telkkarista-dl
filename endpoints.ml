@@ -87,18 +87,18 @@ let request (type session) (type request_) (type response) uri (request : (sessi
     post_with_session ~session ~endpoint:uri ~body >>= handle_response json_to_response
 
 (* let's consider this a special case for how *)
-let login_request =
+let user_login =
   request
     (endpoint_uri "user/login")
     (PostRequestNoSession (API.login_request_to_yojson,
                            API.login_response_of_yojson))
 
-let checkSession_request =
+let user_checkSession =
   request
     (endpoint_uri "user/checkSession")
     (GetRequest (API.checkSession_response_of_yojson))
 
-let range_request =
+let epg_range =
   request
     (endpoint_uri "epg/range")
     (PostRequest (API.range_request_to_yojson,
@@ -115,24 +115,24 @@ let download_url cache_server (session_token : API.session_token) format quality
     else
       None
 
-let cache_request =
+let cache_get =
   request
     (endpoint_uri "cache/get")
     (GetRequest API.cache_response_of_yojson)
 
-let client_vod_getUrl_request =
+let client_vod_getUrl =
   request
     (endpoint_uri "client/vod/getUrl")
     (PostRequest (API.client_vod_getUrl_request_to_yojson,
                   API.json_response_of_yojson))
 
-let epg_info_request =
+let epg_info =
   request
     (endpoint_uri "epg/info")
     (PostRequest (API.epg_info_request_to_yojson,
                   API.epg_info_response_of_yojson))
 
-let user_settings_request =
+let user_settings =
   request
     (endpoint_uri "user/settings")
     (GetRequest (API.user_settings_response_of_yojson))

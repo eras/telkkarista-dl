@@ -156,7 +156,7 @@ let lwt9 f a b c d e g h i j = Lwt_unix.run (f a b c d e g h i j)
 
 let cmd_checkSession env =
   let checkSession common =
-    interactive_request Endpoints.checkSession_request common.Common.c_session () @@
+    interactive_request Endpoints.user_checkSession common.Common.c_session () @@
     fun response -> response.API._id
   in
   let doc = "Check session status" in
@@ -165,7 +165,7 @@ let cmd_checkSession env =
 
 let cmd_login env =
   let login common email password =
-    interactive_request Endpoints.login_request () { API.email; password } @@
+    interactive_request Endpoints.user_login () { API.email; password } @@
     fun token ->
     Persist.set_email_password env.Common.e_persist email password;
     Persist.set_session env.Common.e_persist token;
@@ -177,7 +177,7 @@ let cmd_login env =
 
 let cmd_settings env =
   let settings common =
-    interactive_request Endpoints.user_settings_request common.Common.c_session () @@
+    interactive_request Endpoints.user_settings common.Common.c_session () @@
     fun settings ->
     List.iter
       (function
@@ -369,7 +369,7 @@ let cmd_list env =
     let%lwt response =
       match load_file, from_, to_ with
       | None, Some from_, Some to_ -> (
-          match%lwt Endpoints.range_request common.Common.c_session { API.from_; to_ } with
+          match%lwt Endpoints.epg_range common.Common.c_session { API.from_; to_ } with
           | None ->
             Printf.printf "Failed to receive response\n%!";
             return None
@@ -413,7 +413,7 @@ let cmd_list env =
 
 let cmd_cache env =
   let cache common =
-    interactive_request Endpoints.cache_request common.Common.c_session () @@
+    interactive_request Endpoints.cache_get common.Common.c_session () @@
     fun response -> API.show_cache_response response
   in
   let doc = "List cache servers" in
@@ -423,7 +423,7 @@ let cmd_cache env =
 (* useless currently. what are the parameters to the request? *)
 let cmd_vod_url env =
   let vod_url common pid =
-    match%lwt Endpoints.epg_info_request common.Common.c_session { API.pid } with
+    match%lwt Endpoints.epg_info common.Common.c_session { API.pid } with
     | None ->
       Printf.printf "Sorry, no such programm id could be found\n";
       return ()
@@ -433,7 +433,7 @@ let cmd_vod_url env =
         path = recordpath;
         file = "highest.mp4";
       } in
-      interactive_request Endpoints.client_vod_getUrl_request common.Common.c_session request @@
+      interactive_request Endpoints.client_vod_getUrl common.Common.c_session request @@
       fun response -> API.show_json_response response
     | Some _ ->
       Printf.printf "Sorry, no recording for the program id could be found\n";
@@ -444,7 +444,7 @@ let cmd_vod_url env =
   Term.info "vod-url" ~doc
 
 let vod_url session cache_server pid format quality =
-  match%lwt Endpoints.epg_info_request session { API.pid } with
+  match%lwt Endpoints.epg_info session { API.pid } with
   | None -> return None
   | Some ({ recordpath = Some recordpath } as info) -> (
       let filter_by_format format = List.filter (fun (f, _) -> f = format) in
@@ -487,7 +487,7 @@ let cmd_epg_info env =
     let request = {
       API.pid = pid;
     } in
-    interactive_request Endpoints.epg_info_request common.Common.c_session request @@
+    interactive_request Endpoints.epg_info common.Common.c_session request @@
     API.show_epg_info_response
   in
   let doc = "Retrieve info about a program" in
