@@ -172,23 +172,13 @@ let default_prompt env =
   Term.(ret (pure (fun _ -> `Help (`Pager, None)) $ common_opts_t env)),
   Term.info program_name ~version ~sdocs:"COMMON OPTIONS" ~doc ~man
 
-let lwt1 f a = Lwt_unix.run (f a)
-let lwt2 f a b = Lwt_unix.run (f a b)
-let lwt3 f a b c = Lwt_unix.run (f a b c)
-let lwt4 f a b c d = Lwt_unix.run (f a b c d)
-let lwt5 f a b c d e = Lwt_unix.run (f a b c d e)
-let lwt6 f a b c d e g = Lwt_unix.run (f a b c d e g)
-let lwt7 f a b c d e g h = Lwt_unix.run (f a b c d e g h)
-let lwt8 f a b c d e g h i = Lwt_unix.run (f a b c d e g h i)
-let lwt9 f a b c d e g h i j = Lwt_unix.run (f a b c d e g h i j)
-
 let cmd_checkSession env =
   let checkSession common =
     interactive_request common Endpoints.user_checkSession common.Common.c_session () @@
     fun response -> response.API._id
   in
   let doc = "Check session status" in
-  Term.(pure (lwt1 checkSession) $ common_opts_t env),
+  Term.(pure checkSession $ common_opts_t env),
   Term.info "checkSession" ~doc
 
 let update_persisted_settings env settings =
@@ -219,7 +209,7 @@ let cmd_login env =
       return ()
   in
   let doc = "Log into the service" in
-  Term.(pure (lwt3 login) $ common_opts_t env $ username_t env.Common.e_persist $ password_t env.Common.e_persist),
+  Term.(pure login $ common_opts_t env $ username_t env.Common.e_persist $ password_t env.Common.e_persist),
   Term.info "login" ~doc
 
 let cmd_settings env =
@@ -230,7 +220,7 @@ let cmd_settings env =
     API.show_user_settings_response settings
   in
   let doc = "Retrieve settings" in
-  Term.(pure (lwt1 settings) $ common_opts_t env),
+  Term.(pure settings $ common_opts_t env),
   Term.info "settings" ~doc
 
 module TimeMap = Map.Make (struct type t = float let compare = compare end)
@@ -451,7 +441,7 @@ let cmd_list env =
       return ()
   in
   let doc = "List vods from given time range" in
-  Term.(pure (lwt8 range) $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t $ channels_t $ name_filter_t $ description_filter_t),
+  Term.(pure range $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t $ channels_t $ name_filter_t $ description_filter_t),
   Term.info "list" ~doc
 
 let cmd_cache env =
@@ -460,7 +450,7 @@ let cmd_cache env =
     fun response -> API.show_cache_response response
   in
   let doc = "List cache servers" in
-  Term.(pure (lwt1 cache) $ common_opts_t env),
+  Term.(pure cache $ common_opts_t env),
   Term.info "cache" ~doc
 
 (* useless currently. what are the parameters to the request? *)
@@ -483,7 +473,7 @@ let cmd_vod_url env =
       return ()
   in
   let doc = "NOT WORKING: Retrieve the URL of a program" in
-  Term.(pure (lwt2 vod_url) $ common_opts_t env $ pid_t),
+  Term.(pure vod_url $ common_opts_t env $ pid_t),
   Term.info "vod-url" ~doc
 
 let vod_url common session cache_server pid format quality =
@@ -521,7 +511,7 @@ let cmd_url env =
       return ()
   in
   let doc = "Retrieve the URL of a program" in
-  Term.(pure (lwt5 url) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
+  Term.(pure url $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
   Term.info "url" ~doc
 
 let download_url url =
@@ -560,7 +550,7 @@ let cmd_download env =
       download_url (Uri.of_string url)
   in
   let doc = "Retrieve a program" in
-  Term.(pure (lwt5 command) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pids_t $ format_t $ quality_t),
+  Term.(pure command $ common_opts_t env $ cache_server_t env.Common.e_persist $ pids_t $ format_t $ quality_t),
   Term.info "download" ~doc
 
 let cmd_epg_info env =
@@ -572,7 +562,7 @@ let cmd_epg_info env =
     API.show_epg_info_response
   in
   let doc = "Retrieve info about a program" in
-  Term.(pure (lwt2 epg_info) $ common_opts_t env $ pid_t),
+  Term.(pure epg_info $ common_opts_t env $ pid_t),
   Term.info "info" ~doc
 
 let main () =
@@ -594,8 +584,10 @@ let main () =
   let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)
   with
-  | `Error _ -> exit 1
-  | _        ->
+  | `Error _   -> exit 1
+  | `Version | `Help -> exit 0
+  | `Ok result ->
+    Lwt_unix.run result;
     Persist.save_persist env.Common.e_persist;
     exit 0
 
