@@ -5,7 +5,7 @@ open Lwt.Infix
 open Cmdliner
 
 let program_name = "telkkarista"
-let version = "0.1"
+let version = Version.version
 
 let return = Lwt.return
 
