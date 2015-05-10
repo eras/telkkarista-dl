@@ -93,6 +93,7 @@ type record_state = [
   | `Storage
   | `Pending
   | `Recording
+  | `Recorded
   | `None
 ] [@@deriving show]
 
@@ -100,12 +101,15 @@ let record_state_of_yojson = function
   | `String "storage" -> `Ok `Storage
   | `String "pending" -> `Ok `Pending
   | `String "recording" -> `Ok `Recording
-  | _ -> `Error "API.record_state"
+  | `String "recorded" -> `Ok `Recorded
+  | `String state -> `Error ("API.record_state(" ^ state ^ ")")
+  | _ -> `Error ("API.record_state not string")
 
 let record_state_to_yojson = function
   | `Storage -> `String "storage"
   | `Pending -> `String "pending"
   | `Recording -> `String "recording"
+  | `Recorded -> `String "recorded"
   | `None -> `String "none"
 
 type vod = {
