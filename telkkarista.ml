@@ -372,7 +372,9 @@ let cmd_url env =
           Printf.printf "Sorry, there is no match for required format/quality\n%!";
           return ()
         | Some (format, quality) ->
-          let url = Endpoints.download_url cache_server common.Common.c_session format quality info "file" in
+          let title = Option.default "file" @@ title_for info in
+          let title = Re.replace_string (Re.compile @@ Re_pcre.re "[/ ]") ~by:"_" title in
+          let url = Endpoints.download_url cache_server common.Common.c_session format quality info title in
           Printf.printf "%s\n%!" (Option.default "not available" url);
           return ()
       )

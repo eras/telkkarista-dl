@@ -11,5 +11,7 @@
 	 package(netstring), \
 	 package(toml), \
 	 package(containers.misc), \
-	 package(text)
+	 package(text), \
+	 package(re), \
+	 package(re.pcre)
 true: debug

@@ -10,5 +10,6 @@ PKG netstring
 PKG toml
 PKG containers.misc
 PKG text
+PKG re
 FLG -w -40
 
