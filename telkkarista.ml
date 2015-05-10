@@ -104,6 +104,11 @@ let name_filter_t =
   let doc = "Name filtering. List only shows that have this string in their name." in
   Arg.(value & opt (some string) None & info ["n"; "name"] ~docv:"NAME" ~doc)
 
+let description_filter_t =
+  let doc = "Description filtering. List only shows that have this string in their description. \
+             This is useless, though, as the TV listing doesn't include this information.." in
+  Arg.(value & opt (some string) None & info ["d"; "description"] ~docv:"DESCRIPTION" ~doc)
+
 let help_subcommands = [
   `S "COMMON OPTIONS";
   `P "These options are common to all commands.";
@@ -187,6 +192,12 @@ let index_of xs x =
 let title_for vod =
   let titles = vod.API.title in
   match List.sort (compare_by (index_of language_preference % fst)) titles with
+  | (_, preferred)::_ -> Some preferred
+  | [] -> None
+
+let subtitle_for vod =
+  let subtitles = vod.API.subtitle in
+  match List.sort (compare_by (index_of language_preference % fst)) subtitles with
   | (_, preferred)::_ -> Some preferred
   | [] -> None
 
@@ -299,6 +310,11 @@ let vod_name_matches pattern _channel vod =
   | None -> false
   | Some title -> Re.execp pattern title
 
+let vod_description_matches pattern _channel vod =
+  match subtitle_for vod with
+  | None -> false
+  | Some title -> Re.execp pattern title
+
 let filter_empty_vods = List.filter (function (_channel, []) -> false | _ -> true)
 
 let filter_vods f range_response =
@@ -313,8 +329,15 @@ let optionally_filter_name name_filter range_response =
     let re = Re.str name_filter |> Re.no_case |> Re.compile in
     filter_vods (vod_name_matches re) range_response
 
+let optionally_filter_description description_filter range_response =
+  match description_filter with
+  | None -> range_response
+  | Some description_filter ->
+    let re = Re.str description_filter |> Re.no_case |> Re.compile in
+    filter_vods (vod_description_matches re) range_response
+
 let cmd_list env =
-  let range common from_ to_ load_file save_file channels name_filter =
+  let range common from_ to_ load_file save_file channels name_filter description_filter =
     let channels =
       (* ensure there is never an empty channel filter *)
       match channels with
@@ -358,11 +381,12 @@ let cmd_list env =
       response
       |> optionally_filter_channels channels
       |> optionally_filter_name name_filter
+      |> optionally_filter_description description_filter
       |> output_program_list;
       return ()
   in
   let doc = "List vods from given time range" in
-  Term.(pure (lwt7 range) $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t $ channels_t $ name_filter_t),
+  Term.(pure (lwt8 range) $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t $ channels_t $ name_filter_t $ description_filter_t),
   Term.info "list" ~doc
 
 let cmd_cache env =
