@@ -4,7 +4,7 @@ module Text = Text'
 open Lwt.Infix
 open Cmdliner
 
-let program_name = "telkkarista"
+let program_name = "telkkarista-dl"
 let version = Version.version
 
 let return = Lwt.return
