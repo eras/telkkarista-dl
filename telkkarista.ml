@@ -306,12 +306,6 @@ let cmd_list env =
             Printf.printf "Failed to receive response\n%!";
             return None
           | Some response ->
-            ( match save_file with
-              | None -> ()
-              | Some file ->
-                File.with_file_out file @@ fun io ->
-                Printf.fprintf io "%s" (API.range_response_to_yojson response |> Yojson.Safe.pretty_to_string)
-            );
             return (Some response)
         )
       | Some file, None, None -> (
@@ -331,6 +325,13 @@ let cmd_list env =
     match response with
     | None -> return ()
     | Some response ->
+      (* saving is always unfiltered, to allow refiltering it. bad choice? *)
+      ( match save_file with
+        | None -> ()
+        | Some file ->
+          File.with_file_out file @@ fun io ->
+          Printf.fprintf io "%s" (API.range_response_to_yojson response |> Yojson.Safe.pretty_to_string)
+      );
       let response = optionally_filter_channels channels response in
       output_program_list response;
       return ()
