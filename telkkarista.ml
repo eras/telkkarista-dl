@@ -269,15 +269,20 @@ let cmd_list env =
   let range common from_ to_ load_file save_file channels =
     match load_file, from_, to_ with
     | None, Some from_, Some to_ -> (
-        interactive_request Endpoints.range_request common.Common.c_session { API.from_; to_ } @@
-        fun response ->
-        ( match save_file with
-          | None -> ()
-          | Some file ->
-            File.with_file_out file @@ fun io ->
-            Printf.fprintf io "%s" (API.range_response_to_yojson response |> Yojson.Safe.pretty_to_string)
-        );
-        API.show_range_response response
+        match%lwt Endpoints.range_request common.Common.c_session { API.from_; to_ } with
+        | None ->
+          Printf.printf "Failed to receive response\n%!";
+          return ()
+        | Some response ->
+          ( match save_file with
+            | None -> ()
+            | Some file ->
+              File.with_file_out file @@ fun io ->
+              Printf.fprintf io "%s" (API.range_response_to_yojson response |> Yojson.Safe.pretty_to_string)
+          );
+          (* API.show_range_response response *)
+          output_program_list response;
+          return ()
       )
     | Some file, None, None -> (
         let input = File.with_file_in file IO.read_all |> Yojson.Safe.from_string |> API.range_response_of_yojson in
