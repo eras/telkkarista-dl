@@ -521,6 +521,43 @@ let cmd_url env =
   Term.(pure (lwt5 url) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
   Term.info "url" ~doc
 
+let download_url url =
+  let filename = Uri.path url |> Re.replace ~f:(const "") (Re_pcre.re "^(.*/)"|> Re.compile) in
+  let filename_tmp = filename ^ ".partial" in
+  let headers = Cohttp.Header.of_list [] in
+  let%lwt (response, body) = Cohttp_lwt_unix.Client.get ~headers url in
+  let headers = response.headers in
+  let total_length = Option.map Int64.of_string @@ Cohttp.Header.get headers "Content-Length" in
+  let stream = Cohttp_lwt_body.to_stream body in
+  Printf.printf "Saving to %s\n%!" filename_tmp;
+  let file = open_out filename_tmp in
+  let%lwt _ = Lwt_stream.fold_s (
+      fun str received_bytes ->
+        let bytes = String.length str in
+        let received_bytes = Int64.(add received_bytes (of_int bytes)) in
+        Printf.printf "%Ld/%s\r%!" received_bytes (match total_length with None -> "unknown" | Some b -> Int64.to_string b);
+        output_string file str;
+        return received_bytes
+    ) stream 0L
+  in
+  close_out file;
+  Printf.printf "Renaming %s->%s\n%!" filename_tmp filename;
+  Sys.rename filename_tmp filename;
+  return ()
+
+let cmd_download env =
+  let command common cache_server pid format quality =
+    match%lwt vod_url common common.Common.c_session cache_server pid format quality with
+    | None ->
+      Printf.printf "Sorry, no such programm id could be found\n%!";
+      return ()
+    | Some url ->
+      Printf.printf "%s\n%!" url;
+      download_url (Uri.of_string url)
+  in
+  let doc = "Retrieve a program" in
+  Term.(pure (lwt5 command) $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
+  Term.info "download" ~doc
 
 let cmd_epg_info env =
   let epg_info common pid =
@@ -535,6 +572,10 @@ let cmd_epg_info env =
   Term.info "info" ~doc
 
 let main () =
+  (* Otherwise downloading is unbearably slow *)
+  Gc.set { (Gc.get ()) with
+           Gc.minor_heap_size = (32 * (1 lsl 20));
+           major_heap_increment = 150 };
   let subcommands = [
     cmd_checkSession;
     cmd_login;
@@ -544,6 +585,7 @@ let main () =
     cmd_epg_info;
     cmd_vod_url;
     cmd_url;
+    cmd_download;
   ] in
   let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)
