@@ -1,2 +1,15 @@
-<*>: package(cohttp.lwt), package(cmdliner), package(ppx_deriving_yojson), package(yojson), package(lwt.ppx), package(lwt), package(batteries), warn(-40), package(ppx_deriving.show), package(ISO8601), package(netstring), package(toml), package(containers.misc), package(text)
+<*>: package(cohttp.lwt), \
+	 package(cmdliner), \
+	 package(ppx_deriving_yojson), \
+	 package(yojson), \
+	 package(lwt.ppx), \
+	 package(lwt), \
+	 package(batteries), \
+	 warn(-40), \
+	 package(ppx_deriving.show), \
+	 package(ISO8601), \
+	 package(netstring), \
+	 package(toml), \
+	 package(containers.misc), \
+	 package(text)
 true: debug
