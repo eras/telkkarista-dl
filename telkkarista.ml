@@ -113,8 +113,30 @@ let help_subcommands = [
   `S "COMMON OPTIONS";
   `P "These options are common to all commands.";
   `S "MORE HELP";
-  `P "Use `$(mname) $(i,COMMAND) --help' for help on a single command.";
-  `S "BUGS"; `P "Check bug reports at http://bugs.example.org.";]
+  `P "Use $(b,$(mname) COMMAND --help) for help on a single command.";
+  `S "EXAMPLES";
+  `P "Log in to the server the first time:";
+  `P "$(b,% $(mname) login -u user@name -p password)";
+  `P "This will store used username and password to re-logging in later; plain $(b,$(mname) login) without -u and -p is then sufficient.";
+  `P "Retrieving cache server settings from the server:";
+  `P "$(b,% $(mname) settings)";
+  `P "Retrieving list of TV shows:";
+  `P "$(b,% $(mname) list -b '2015-01-01T10:00:00' -e '2015-01-01T20:00:00')";
+  `P "The program identifier can be used with $(b,info) and $(b,url). To save the list to a file in machine-readable format you may use the switch $(b,--save):";
+  `P "$(b,% $(mname) list -b '2015-01-01T10:00:00' -e '2015-01-01T20:00:00' --save results.json)";
+  `P "which may later on be read with --load (in which case the time range cannot be used).";
+  `P "With $(b,$(mname) list) one may use further filters such as $(b,-c yletv1) for limiting search to a single channel or $(b,-n dredd) for searching case-insensitively for a certain string within the names of the programs. Note that regardless which search options have been used with $(b,list --save), the saved results will be unfiltered.";
+  `P "$(b,% $(mname) list -b '2015-01-01T10:00:00' -e '2015-01-01T20:00:00' --save results.json -n dredd)";
+  `P "$(b,% $(mname) list --load results.json -n judge)";
+  `P "To find out the download URL of a program, use $(b,$(mname) url):";
+  `P "$(b,% $(mname) url --pid 554e2bbbe3398c93fe916428)";
+  `S "FILES";
+  `P "$(~/.config/telkkarista/session or ~/.telkkarista/session) contain the current effective configuration.";
+  `S "ENVIRONMENT";
+  `P "$(~/.config/telkkarista/session or ~/.telkkarista/session) contain the current effective configuration.";
+  `P "TELKKARISTA_DEBUG - when set to 1, received responses from the server will be output to standard output.";
+  (* `S "BUGS"; `P "Check bug reports at http://bugs.example.org."; *)
+]
 
 let default_prompt env = 
   let doc = "An unofficial standalone command line client for Telkkarista.com" in 
