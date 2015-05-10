@@ -10,7 +10,8 @@ let (^/) a b = a ^ "/" ^ b
 (* Converting JSON to proper data types uses this type *)
 type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 
-type ('session, 'request, 'response) result = ('session -> 'request -> 'response option Lwt.t)
+type 'session update_session = unit -> 'session Lwt.t
+type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> 'response option Lwt.t
 
 type ('session, 'request, 'response) request =
   (* GetRequest has no parameters, but does have a response, ie. checkSession *)
@@ -55,6 +56,31 @@ let get ~session ~endpoint =
   if debug then Printf.printf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
 
+let retry session0 update_session request =
+  let rec loop retries_left session =
+    let%lwt response = request ~session in
+    match response with
+    | `Assoc kvs -> (
+        let status = List.assoc "status" kvs in
+        let code = List.assoc "code" kvs in
+        match List.assoc "status" kvs, List.assoc "code" kvs with
+        | `String "error", `String "invalid_session" when retries_left > 0 ->
+          let%lwt new_session = update_session () in
+          loop (retries_left - 1) new_session
+        | `String "error", `String "invalid_session" ->
+          Printf.eprintf "Failed to relogin\n%!";
+          assert false
+        | other -> return response
+        | exception Not_found ->
+          Printf.eprintf "Response is missing status and code\n%!";
+          assert false
+      )
+    | _ ->
+      Printf.eprintf "Response is missing associative container\n%!";
+      assert false
+  in
+  loop 1 session0
+
 (* Construct a request object for the given resource. The return
    type [req] results in two more arguments: the session id (or ()
    if no session as with PostRequestNoSession) and data argument (or
@@ -77,14 +103,14 @@ let request (type session) (type request_) (type response) uri (request : (sessi
       return (Some payload)
   in
   match request with
-  | GetRequest json_to_response -> fun (session) _ ->
-    get ~session ~endpoint:uri >>= handle_response json_to_response
-  | PostRequestNoSession (request_to_json, json_to_response) -> fun _ arg ->
+  | GetRequest json_to_response -> fun session update_session _ ->
+    retry session update_session (get ~endpoint:uri) >>= handle_response json_to_response
+  | PostRequestNoSession (request_to_json, json_to_response) -> fun _session _update_session arg ->
     let body = Yojson.Safe.to_string (request_to_json arg) in
     post_without_session ~endpoint:uri ~body >>= handle_response json_to_response
-  | PostRequest (request_to_json, json_to_response) -> fun session arg ->
+  | PostRequest (request_to_json, json_to_response) -> fun session update_session arg ->
     let body = Yojson.Safe.to_string (request_to_json arg) in
-    post_with_session ~session ~endpoint:uri ~body >>= handle_response json_to_response
+    retry session update_session (post_with_session ~endpoint:uri ~body) >>= handle_response json_to_response
 
 (* let's consider this a special case for how *)
 let user_login =
