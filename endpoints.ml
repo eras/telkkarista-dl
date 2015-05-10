@@ -64,7 +64,7 @@ let request (type session) (type request_) (type response) uri (request : (sessi
     match API.response_of_yojson json_to_response response with
     (* We failed to decode then JSON; TODO: better error handling *)
     | `Error error ->
-      Printf.printf "Failed to convert response from %s: %s\n%!" (Yojson.Safe.to_string response) error;
+      Printf.printf "Failed to convert response due to %s from %s\n%!" error (Yojson.Safe.to_string response);
       return None
     (* We succeeded in decoding the JSON, but it indicated an error. TODO: better error handling *)
     | `Ok { API.code = code; payload = None } ->
