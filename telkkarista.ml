@@ -160,10 +160,9 @@ let help_subcommands = [
   `P "To find out the download URL of a program, use $(b,$(mname) url):";
   `P "$(b,% $(mname) url --pid 554e2bbbe3398c93fe916428)";
   `S "FILES";
-  `P "$(~/.config/telkkarista/session or ~/.telkkarista/session) contain the current effective configuration.";
+  `P "$(b,~/.config/telkkarista/session) or $(qb,~/.telkkarista/session) contain the current effective configuration.";
   `S "ENVIRONMENT";
-  `P "$(~/.config/telkkarista/session or ~/.telkkarista/session) contain the current effective configuration.";
-  `P "TELKKARISTA_DEBUG - when set to 1, received responses from the server will be output to standard output.";
+  `P "$(b,TELKKARISTA_DEBUG) - when set to 1, received responses from the server will be output to standard output.";
   (* `S "BUGS"; `P "Check bug reports at http://bugs.example.org."; *)
 ]
 
