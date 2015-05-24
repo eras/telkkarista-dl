@@ -36,11 +36,11 @@ let debug = try Sys.getenv "TELKKARISTA_DEBUG" = "1" with Not_found -> false
 
 (* Issues a general POST request to the endpoint *)
 let post ~headers ~endpoint ~body =
-  Printf.printf "Requesting: %s\n%!" body;
+  if debug then Printf.eprintf "Requesting: %s\n%!" body;
   let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
-  if debug then Printf.printf "Response: %s\n%!" body_string;
+  if debug then Printf.eprintf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
 
 (* Issues a POST request with session id to the endpoint *)
@@ -54,7 +54,7 @@ let get ~session ~endpoint =
   let headers = Cohttp.Header.of_list (session_header session) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
-  if debug then Printf.printf "Response: %s\n%!" body_string;
+  if debug then Printf.eprintf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
 
 let retry session0 update_session request =
@@ -93,11 +93,11 @@ let request (type session) (type request_) (type response) uri (request : (sessi
     match API.response_of_yojson json_to_response response with
     (* We failed to decode then JSON; TODO: better error handling *)
     | `Error error ->
-      Printf.printf "Failed to convert response due to %s from %s\n%!" error (Yojson.Safe.to_string response);
+      Printf.eprintf "Failed to convert response due to %s from %s\n%!" error (Yojson.Safe.to_string response);
       return (Error error)
     (* We succeeded in decoding the JSON, but it indicated an error. TODO: better error handling *)
     | `Ok { API.code = code; payload = None } ->
-      Printf.printf "Error %s in %s\n%!" code (Yojson.Safe.to_string response);
+      Printf.eprintf "Error %s in %s\n%!" code (Yojson.Safe.to_string response);
       return Invalid_response
     (* Everything's awesome! *)
     | `Ok { API.payload = Some payload } ->
