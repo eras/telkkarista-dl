@@ -551,14 +551,47 @@ let download_url url filename =
   let stream = Cohttp_lwt_body.to_stream body in
   Printf.printf "Saving to %s\n%!" filename_tmp;
   let file = open_out filename_tmp in
+  let window_bytes = 1000000L in
   let%lwt _ = Lwt_stream.fold_s (
-      fun str received_bytes ->
+      fun str (received_bytes, queue) ->
+        let (queue, speed) =
+          match Deque.front queue, Deque.rear queue with
+          | Some ((oldest_bytes, oldest_time), rest), Some (_, (latest_bytes, latest_time)) ->
+            let delta_bytes = Int64.sub latest_bytes oldest_bytes in
+            let delta_time = latest_time -. oldest_time in
+            (* slightly broken if we receive window size blocks.. *)
+            ((if delta_bytes > Int64.(window_bytes * 2L) then rest else queue),
+             (if delta_bytes > window_bytes then Some (Int64.to_float delta_bytes /. delta_time)
+              else None))
+          | _ -> (queue, None)
+        in
         let bytes = String.length str in
         let received_bytes = Int64.(add received_bytes (of_int bytes)) in
-        Printf.printf "%Ld/%s\r%!" received_bytes (match total_length with None -> "unknown" | Some b -> Int64.to_string b);
+        let bytes_left =
+          match total_length with
+          | None -> None
+          | Some total_length -> Some (Int64.sub total_length received_bytes)
+        in
+        let seconds_left =
+          match bytes_left, speed with
+          | Some bytes_left, Some speed -> Some (Int64.to_float bytes_left /. speed)
+          | _ -> None
+        in
+        let eta =
+          seconds_left |> Option.map @@ fun seconds ->
+          "ETA: " ^ ISO8601.Permissive.string_of_datetimezone (Unix.gettimeofday () +. seconds, ~-.(float (Netdate.get_localzone ())) *. 60.0)
+        in
+        Printf.printf "%Ld/%s %s %s\r%!"
+          received_bytes
+          (match total_length with None -> "unknown" | Some b -> Int64.to_string b)
+          (match speed with
+           | None -> ""
+           | Some speed -> Printf.sprintf "%.0f KB/s" (speed /. 1000.0))
+          (Option.default "" eta);
         output_string file str;
-        return received_bytes
-    ) stream 0L
+        let queue = Deque.snoc queue (received_bytes, Unix.gettimeofday ()) in
+        return (received_bytes, queue)
+    ) stream (0L, Deque.empty)
   in
   close_out file;
   Printf.printf "Renaming %s->%s\n%!" filename_tmp filename;
