@@ -517,7 +517,14 @@ let vod_url common session cache_server pid format quality =
       | Some (format, quality) ->
         let title = Option.default "file" @@ title_for info in
         let title = Re.replace_string (Re.compile @@ Re_pcre.re "[/ ]") ~by:"_" title in
-        return @@ Endpoints.download_url cache_server session format quality info title
+        let url = Endpoints.download_url cache_server session format quality info title in
+        match url with
+        | None -> return None
+        | Some url ->
+          let timestamp = ISO8601.Permissive.string_of_datetime info.API.start in
+          let timestamp = Re.replace_string (Re.compile @@ Re_pcre.re ":") ~by:"" timestamp in
+          let filename = title ^ "-" ^ timestamp ^ "." ^ format in
+          return (Some (url, filename))
     )
   | Endpoints.Ok _ -> return None
 
@@ -527,7 +534,7 @@ let cmd_url env =
     | None ->
       Printf.printf "Sorry, no such programm id could be found\n%!";
       return ()
-    | Some url ->
+    | Some (url, _filename) ->
       Printf.printf "%s\n%!" url;
       return ()
   in
@@ -535,8 +542,7 @@ let cmd_url env =
   Term.(pure url $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
   Term.info "url" ~doc
 
-let download_url url =
-  let filename = Uri.path url |> Re.replace ~f:(const "") (Re_pcre.re "^(.*/)"|> Re.compile) in
+let download_url url filename =
   let filename_tmp = filename ^ ".partial" in
   let headers = Cohttp.Header.of_list [] in
   let%lwt (response, body) = Cohttp_lwt_unix.Client.get ~headers url in
@@ -566,9 +572,9 @@ let cmd_download env =
     | None ->
       Printf.printf "Sorry, no such programm id could be found\n%!";
       return ()
-    | Some url ->
+    | Some (url, name) ->
       Printf.printf "%s\n%!" url;
-      download_url (Uri.of_string url)
+      download_url (Uri.of_string url) name
   in
   let doc = "Retrieve a program" in
   Term.(pure command $ common_opts_t env $ cache_server_t env.Common.e_persist $ pids_t $ format_t $ quality_t),
