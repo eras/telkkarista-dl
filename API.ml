@@ -170,7 +170,7 @@ type epg_info_request = {
   pid   : pid;
 } [@@deriving to_yojson]
 
-type epg_info_response = vod [@@deriving show, of_yojson { strict = false }]
+type epg_info_response = vod [@@deriving show, yojson { strict = false }]
 
 type speedtest = {
   mbit : float;

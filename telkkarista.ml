@@ -580,7 +580,7 @@ let cmd_epg_info env =
       API.pid = pid;
     } in
     interactive_request common Endpoints.epg_info common.Common.c_session request @@
-    API.show_epg_info_response
+    fun r -> API.epg_info_response_to_yojson r |> Yojson.Safe.pretty_to_string
   in
   let doc = "Retrieve info about a program" in
   Term.(pure epg_info $ common_opts_t env $ pid_t),
