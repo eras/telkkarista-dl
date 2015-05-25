@@ -14,4 +14,4 @@
 	 package(text), \
 	 package(re), \
 	 package(re.pcre)
-true: debug
+true: debug, bin_annot
