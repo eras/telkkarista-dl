@@ -581,12 +581,12 @@ let download_url url filename =
           seconds_left |> Option.map @@ fun seconds ->
           "ETA: " ^ ISO8601.Permissive.string_of_datetimezone (Unix.gettimeofday () +. seconds, ~-.(float (Netdate.get_localzone ())) *. 60.0)
         in
-        Printf.printf "%Ld/%s %s %s\r%!"
+        Printf.printf "%Ld/%s %s %s   \r%!"
           received_bytes
           (match total_length with None -> "unknown" | Some b -> Int64.to_string b)
           (match speed with
            | None -> ""
-           | Some speed -> Printf.sprintf "%.0f KB/s" (speed /. 1000.0))
+           | Some speed -> Printf.sprintf "%.0f kB/s" (speed /. 1000.0))
           (Option.default "" eta);
         output_string file str;
         let queue = Deque.snoc queue (received_bytes, Unix.gettimeofday ()) in
