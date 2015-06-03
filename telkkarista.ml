@@ -13,41 +13,45 @@ let renegotiate_session : Common.common -> _ Endpoints.update_session = fun comm
   let env = common.Common.c_env in
   match Persist.get_email_password common.Common.c_env.Common.e_persist with
   | None -> (fun () -> 
-      Printf.printf "Cannot acquire token; no saved credentials\n";
+      Printf.eprintf "Cannot acquire token; no saved credentials\n";
       assert false
     )
   | Some (email, password) -> (fun () ->
       match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
       | Endpoints.Error _ | Endpoints.Invalid_response ->
-        Printf.printf "Failed to acquire token\n%!";
+        Printf.eprintf "Failed to acquire token\n%!";
         assert false
       | Endpoints.Ok token ->
         Persist.set_session env.Common.e_persist token;
         return token
     )
 
-let interactive_single_shot endpoint session arg show =
-  let%lwt response = endpoint session (const (return ())) arg in
-  match response with
-  | None ->
-    Printf.printf "There was an error\n%!";
-    return ()
-  | Some response ->
-    Printf.printf "%s\n%!" (show response);
-    return ()
+type status =
+  | StatusOK
+  | StatusEndpointError of string
+  | StatusInvalidResponse
+  | StatusNotFound
+  | StatusInvalidParameters
+
+let returncode_of_status = function
+  | StatusOK                -> 0
+  | StatusEndpointError _   -> 1
+  | StatusInvalidResponse   -> 2
+  | StatusNotFound          -> 3
+  | StatusInvalidParameters -> 4
 
 let interactive_request (common : Common.common) (endpoint : (_, _, _) Endpoints.result) session arg show =
   let%lwt response = endpoint session (renegotiate_session common) arg in
   match response with
   | Endpoints.Error error ->
-    Printf.printf "Error: %s\n%!" error;
-    return ()
+    Printf.eprintf "Error: %s\n%!" error;
+    return (StatusEndpointError error);
   | Endpoints.Invalid_response ->
-    Printf.printf "Invalid response\n%!";
-    return ()
+    Printf.eprintf "Invalid response\n%!";
+    return StatusInvalidResponse
   | Endpoints.Ok response ->
     Printf.printf "%s\n%!" (show response);
-    return ()
+    return StatusOK
 
 let common_opts env session = {
   Common.c_session = session;
@@ -198,25 +202,25 @@ let cmd_login env =
   let login common email password =
     match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
     | Endpoints.Invalid_response ->
-      Printf.printf "Failed to log in: invalid response\n";
-      return ()
+      Printf.eprintf "Failed to log in: invalid response\n";
+      return StatusInvalidResponse
     | Endpoints.Error error ->
-      Printf.printf "Failed to log in: %s\n" error;
-      return ()
+      Printf.eprintf "Failed to log in: %s\n" error;
+      return (StatusEndpointError error)
     | Endpoints.Ok token ->
-      Printf.printf "Logged in\n%!";
+      Printf.eprintf "Logged in\n%!";
       Persist.set_email_password env.Common.e_persist email password;
       Persist.set_session env.Common.e_persist token;
-      let%lwt () = match%lwt Endpoints.user_settings token (renegotiate_session common) () with
-        | Endpoints.Invalid_response
-        | Endpoints.Error _ ->
-          Printf.printf "Failed to retrieve settings\n%!";
-          return ()
-        | Endpoints.Ok settings ->
-          update_persisted_settings env settings;
-          return ()
-      in
-      return ()
+      match%lwt Endpoints.user_settings token (renegotiate_session common) () with
+      | Endpoints.Invalid_response ->
+        Printf.eprintf "Failed to retrieve settings\n%!";
+        return StatusInvalidResponse
+      | Endpoints.Error error ->
+        Printf.eprintf "Failed to retrieve settings\n%!";
+        return (StatusEndpointError error)
+      | Endpoints.Ok settings ->
+        update_persisted_settings env settings;
+        return StatusOK
   in
   let doc = "Log into the service" in
   Term.(pure login $ common_opts_t env $ username_t env.Common.e_persist $ password_t env.Common.e_persist),
@@ -414,10 +418,10 @@ let cmd_list env =
       | None, Some from_, Some to_ -> (
           match%lwt Endpoints.epg_range common.Common.c_session (renegotiate_session common) { API.from_; to_ } with
           | Endpoints.Invalid_response ->
-            Printf.printf "Failed to receive response (invalid response)\n%!";
+            Printf.eprintf "Failed to receive response (invalid response)\n%!";
             return None
           | Endpoints.Error error ->
-            Printf.printf "Failed to receive response: %s\n%!" error;
+            Printf.eprintf "Failed to receive response: %s\n%!" error;
             return None
           | Endpoints.Ok response ->
             return (Some response)
@@ -426,18 +430,18 @@ let cmd_list env =
           let input = File.with_file_in file IO.read_all |> Yojson.Safe.from_string |> API.range_response_of_yojson in
           ( match input with
             | `Error error ->
-              Printf.printf "Failed to load response: %s\n" error;
+              Printf.eprintf "Failed to load response: %s\n" error;
               return None
             | `Ok input ->
               return (Some input)
           );
         )
       | _, _, _ ->
-        Printf.printf "Need to provide either time range or --load\n";
+        Printf.eprintf "Need to provide either time range or --load\n";
         return None
     in
     match response with
-    | None -> return ()
+    | None -> return StatusInvalidParameters
     | Some response ->
       (* saving is always unfiltered, to allow refiltering it. bad choice? *)
       ( match save_file with
@@ -451,7 +455,7 @@ let cmd_list env =
       |> optionally_filter_name name_filter
       |> optionally_filter_description description_filter
       |> output_program_list;
-      return ()
+      return StatusOK
   in
   let doc = "List vods from given time range" in
   Term.(pure range $ common_opts_t env $ begin_t $ end_t $ load_file_t $ save_file_t $ channels_t $ name_filter_t $ description_filter_t),
@@ -471,11 +475,11 @@ let cmd_vod_url env =
   let vod_url common pid =
     match%lwt Endpoints.epg_info common.Common.c_session (renegotiate_session common) { API.pid } with
     | Endpoints.Invalid_response ->
-      Printf.printf "Invalid response from the server\n";
-      return ()
+      Printf.eprintf "Invalid response from the server\n";
+      return StatusInvalidResponse
     | Endpoints.Error error ->
-      Printf.printf "Sorry, no such programm id could be found: %s\n" error;
-      return ()
+      Printf.eprintf "Sorry, no such programm id could be found: %s\n" error;
+      return StatusNotFound
     | Endpoints.Ok ({ recordpath = Some recordpath }) ->
       let request = {
         API.pid;
@@ -485,8 +489,8 @@ let cmd_vod_url env =
       interactive_request common Endpoints.client_vod_getUrl common.Common.c_session request @@
       fun response -> API.show_json_response response
     | Endpoints.Ok _ ->
-      Printf.printf "Sorry, no recording for the program id could be found\n";
-      return ()
+      Printf.eprintf "Sorry, no recording for the program id could be found\n";
+      return StatusNotFound
   in
   let doc = "NOT WORKING: Retrieve the URL of a program" in
   Term.(pure vod_url $ common_opts_t env $ pid_t),
@@ -512,7 +516,7 @@ let vod_url common session cache_server pid format quality =
       in
       match format_quality_for preference info with
       | None ->
-        (* Printf.printf "Sorry, there is no match for required format/quality\n%!"; *)
+        (* Printf.eprintf "Sorry, there is no match for required format/quality\n%!"; *)
         return None
       | Some (format, quality) ->
         let title = Option.default "file" @@ title_for info in
@@ -532,11 +536,11 @@ let cmd_url env =
   let url common cache_server pid format quality =
     match%lwt vod_url common common.Common.c_session cache_server pid format quality with
     | None ->
-      Printf.printf "Sorry, no such programm id could be found\n%!";
-      return ()
+      Printf.eprintf "Sorry, no such programm id could be found\n%!";
+      return StatusNotFound
     | Some (url, _filename) ->
       Printf.printf "%s\n%!" url;
-      return ()
+      return StatusOK
   in
   let doc = "Retrieve the URL of a program" in
   Term.(pure url $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
@@ -596,18 +600,23 @@ let download_url url filename =
   close_out file;
   Printf.printf "Renaming %s->%s\n%!" filename_tmp filename;
   Sys.rename filename_tmp filename;
-  return ()
+  return StatusOK
 
 let cmd_download env =
   let command common cache_server pids format quality =
-    pids |> Lwt_list.iter_s @@ fun pid ->
+    pids |> flip Lwt_list.fold_left_s StatusOK @@ fun prev_status pid ->
     match%lwt vod_url common common.Common.c_session cache_server pid format quality with
     | None ->
-      Printf.printf "Sorry, no such programm id could be found\n%!";
-      return ()
+      Printf.eprintf "Sorry, no such programm id could be found\n%!";
+      return (match prev_status with
+          | StatusOK -> StatusNotFound
+          | other -> other)
     | Some (url, name) ->
       Printf.printf "%s\n%!" url;
-      download_url (Uri.of_string url) name
+      let%lwt new_status = download_url (Uri.of_string url) name in
+      return (match prev_status with
+          | StatusOK -> new_status
+          | other -> other)
   in
   let doc = "Retrieve a program" in
   Term.(pure command $ common_opts_t env $ cache_server_t env.Common.e_persist $ pids_t $ format_t $ quality_t),
@@ -640,12 +649,12 @@ let main () =
   let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)
   with
-  | `Error _   -> exit 1
+  | `Error _   -> exit (returncode_of_status StatusInvalidParameters)
   | `Version | `Help -> exit 0
   | `Ok result ->
-    Lwt_unix.run result;
+    let returncode = returncode_of_status (Lwt_unix.run result) in
     Persist.save_persist env.Common.e_persist;
-    exit 0
+    exit returncode
 
 let _ =
   if not !(Sys.interactive) then
