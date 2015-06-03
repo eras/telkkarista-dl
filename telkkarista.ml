@@ -169,6 +169,12 @@ let help_subcommands = [
   `P "To download a program, or programs directly:";
   `P "$(b,% $(mname) download 554e2bbbe3398c93fe916428 557e2bbbe3398c93fe916795)";
   `P "Files will be named after the programs.";
+  `S "RETURN CODES";
+  `P "0 $(b,OK): everything went better than expected!";
+  `P "1 $(b,Endpoint error): there was an error related to the end point.";
+  `P "2 $(b,Invalid response): $(mname) received an invalid response from the server.";
+  `P "3 $(b,Not found): the object (ie. program) could not be found from the server.";
+  `P "4 $(b,Invalid parameters): invalid command line parameters were provided to $(mname).";
   `S "FILES";
   `P "$(b,~/.config/telkkarista/session) or $(qb,~/.telkkarista/session) contain the current effective configuration.";
   `S "ENVIRONMENT";
