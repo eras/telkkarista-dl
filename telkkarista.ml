@@ -246,14 +246,19 @@ let cmd_settings env =
 module TimeMap = Map.Make (struct type t = float let compare = compare end)
 module ChannelMap = Map.Make (struct type t = API.channel let compare = compare end)
 
-let qualities = ["1080p"; "720p"; "highest"; "hi"]
+let qualities = ["1080p"; "720p"; "highest"; "hi"; "med"]
 
-let format_qualities_of_formats formats =
+let format_qualities_of_formats formats : (API.format * API.quality) list =
   formats
   |> List.map (fun (format, quality) -> List.map (fun q -> (format, q)) quality)
   |> List.concat
 
-let format_quality_preference = format_qualities_of_formats [("ts", qualities); ("mp4", qualities)]
+let format_qualities_of_download downloads : (API.format * API.quality) list =
+  downloads
+  |> List.map (fun (format, downloads) -> List.map (fun download -> (format, download.API.quality)) downloads)
+  |> List.concat
+
+let format_quality_preference : (API.format * API.quality) list = format_qualities_of_formats [("ts", qualities); ("mp4", qualities)]
 
 let language_preference = ["fi"; "sv"]
 
@@ -277,7 +282,7 @@ let subtitle_for vod =
   | [] -> None
 
 let format_quality_for preference vod =
-  let formats = format_qualities_of_formats vod.API.downloadFormats in
+  let formats = format_qualities_of_download vod.API.downloads in
   match List.sort (compare_by (index_of preference)) formats with
   | preferred::_ -> Some preferred
   | [] -> None
@@ -369,7 +374,7 @@ let output_program_list input =
   Printf.printf "  %s %s [%s] %s\n"
     (ISO8601.Permissive.string_of_datetime vod.API.start)
     (Option.default "???" vod.API.pid)
-    (if vod.API.downloadFormats <> []
+    (if vod.API.downloads <> []
      then "OK"
      else "--"
     )

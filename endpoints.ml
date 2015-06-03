@@ -132,12 +132,12 @@ let epg_range =
                   API.range_response_of_yojson))
 
 let download_url cache_server (session_token : API.session_token) format quality vod basename =
-  match vod.API.recordpath, List.mem_assoc format vod.API.downloadFormats with
+  match vod.API.recordpath, List.mem_assoc format vod.API.downloads with
   | None, _ -> None
   | _, false -> None
   | Some recordpath, true ->
-    let qualities = List.assoc format vod.API.downloadFormats in
-    if List.mem quality qualities then
+    let downloads = List.assoc format vod.API.downloads in
+    if List.exists (fun download -> download.API.quality = quality) downloads then
       Some ("http://" ^ cache_server ^/ session_token ^/ "vod" ^ recordpath ^ quality ^/ basename ^ "." ^ format)
     else
       None

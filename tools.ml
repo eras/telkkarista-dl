@@ -40,6 +40,8 @@ let pp_json fmt json = Format.fprintf fmt "%s" (Yojson.Safe.to_string json)
 
 let json_of_yojson json = `Ok json
 
+let json_to_yojson json = json
+
 let map_of_yojson f map value =
   match map value with
   | `Ok value -> f value
