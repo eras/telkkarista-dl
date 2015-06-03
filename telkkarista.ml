@@ -32,6 +32,7 @@ type status =
   | StatusInvalidResponse
   | StatusNotFound
   | StatusInvalidParameters
+  | StatusDownloadError
 
 let returncode_of_status = function
   | StatusOK                -> 0
@@ -39,6 +40,7 @@ let returncode_of_status = function
   | StatusInvalidResponse   -> 2
   | StatusNotFound          -> 3
   | StatusInvalidParameters -> 4
+  | StatusDownloadError     -> 5
 
 let interactive_request (common : Common.common) (endpoint : (_, _, _) Endpoints.result) session arg show =
   let%lwt response = endpoint session (renegotiate_session common) arg in
@@ -558,60 +560,80 @@ let cmd_url env =
   Term.info "url" ~doc
 
 let download_url url filename =
-  let filename_tmp = filename ^ ".partial" in
-  let headers = Cohttp.Header.of_list [] in
-  let%lwt (response, body) = Cohttp_lwt_unix.Client.get ~headers url in
-  let headers = response.headers in
-  let total_length = Option.map Int64.of_string @@ Cohttp.Header.get headers "Content-Length" in
-  let stream = Cohttp_lwt_body.to_stream body in
-  Printf.printf "Saving to %s\n%!" filename_tmp;
-  let file = open_out filename_tmp in
-  let window_bytes = 1000000L in
-  let%lwt _ = Lwt_stream.fold_s (
-      fun str (received_bytes, queue) ->
-        let (queue, speed) =
-          match Deque.front queue, Deque.rear queue with
-          | Some ((oldest_bytes, oldest_time), rest), Some (_, (latest_bytes, latest_time)) ->
-            let delta_bytes = Int64.sub latest_bytes oldest_bytes in
-            let delta_time = latest_time -. oldest_time in
-            (* slightly broken if we receive window size blocks.. *)
-            ((if delta_bytes > Int64.(window_bytes * 2L) then rest else queue),
-             (if delta_bytes > window_bytes then Some (Int64.to_float delta_bytes /. delta_time)
-              else None))
-          | _ -> (queue, None)
-        in
-        let bytes = String.length str in
-        let received_bytes = Int64.(add received_bytes (of_int bytes)) in
-        let bytes_left =
-          match total_length with
-          | None -> None
-          | Some total_length -> Some (Int64.sub total_length received_bytes)
-        in
-        let seconds_left =
-          match bytes_left, speed with
-          | Some bytes_left, Some speed -> Some (Int64.to_float bytes_left /. speed)
-          | _ -> None
-        in
-        let eta =
-          seconds_left |> Option.map @@ fun seconds ->
-          "ETA: " ^ ISO8601.Permissive.string_of_datetimezone (Unix.gettimeofday () +. seconds, ~-.(float (Netdate.get_localzone ())) *. 60.0)
-        in
-        Printf.printf "%Ld/%s %s %s   \r%!"
-          received_bytes
-          (match total_length with None -> "unknown" | Some b -> Int64.to_string b)
-          (match speed with
-           | None -> ""
-           | Some speed -> Printf.sprintf "%.0f kB/s" (speed /. 1000.0))
-          (Option.default "" eta);
-        output_string file str;
-        let queue = Deque.snoc queue (received_bytes, Unix.gettimeofday ()) in
-        return (received_bytes, queue)
-    ) stream (0L, Deque.empty)
+  let rec download url recursion_left =
+    let filename_tmp = filename ^ ".partial" in
+    let headers = Cohttp.Header.of_list [] in
+    let%lwt (response, body) = Cohttp_lwt_unix.Client.get ~headers url in
+    let headers = response.headers in
+    match response.status with
+    | `OK ->
+      let total_length = Option.map Int64.of_string @@ Cohttp.Header.get headers "Content-Length" in
+      let stream = Cohttp_lwt_body.to_stream body in
+      Printf.printf "Saving %s to %s\n%!" (Uri.to_string url) filename_tmp;
+      let file = open_out filename_tmp in
+      let window_bytes = 1000000L in
+      let%lwt _ = Lwt_stream.fold_s (
+          fun str (received_bytes, queue) ->
+            let (queue, speed) =
+              match Deque.front queue, Deque.rear queue with
+              | Some ((oldest_bytes, oldest_time), rest), Some (_, (latest_bytes, latest_time)) ->
+                let delta_bytes = Int64.sub latest_bytes oldest_bytes in
+                let delta_time = latest_time -. oldest_time in
+                (* slightly broken if we receive window size blocks.. *)
+                ((if delta_bytes > Int64.(window_bytes * 2L) then rest else queue),
+                 (if delta_bytes > window_bytes then Some (Int64.to_float delta_bytes /. delta_time)
+                  else None))
+              | _ -> (queue, None)
+            in
+            let bytes = String.length str in
+            let received_bytes = Int64.(add received_bytes (of_int bytes)) in
+            let bytes_left =
+              match total_length with
+              | None -> None
+              | Some total_length -> Some (Int64.sub total_length received_bytes)
+            in
+            let seconds_left =
+              match bytes_left, speed with
+              | Some bytes_left, Some speed -> Some (Int64.to_float bytes_left /. speed)
+              | _ -> None
+            in
+            let eta =
+              seconds_left |> Option.map @@ fun seconds ->
+              "ETA: " ^ ISO8601.Permissive.string_of_datetimezone (Unix.gettimeofday () +. seconds, ~-.(float (Netdate.get_localzone ())) *. 60.0)
+            in
+            Printf.printf "%Ld/%s %s %s   \r%!"
+              received_bytes
+              (match total_length with None -> "unknown" | Some b -> Int64.to_string b)
+              (match speed with
+               | None -> ""
+               | Some speed -> Printf.sprintf "%.0f kB/s" (speed /. 1000.0))
+              (Option.default "" eta);
+            output_string file str;
+            let queue = Deque.snoc queue (received_bytes, Unix.gettimeofday ()) in
+            return (received_bytes, queue)
+        ) stream (0L, Deque.empty)
+      in
+      close_out file;
+      Printf.printf "Renaming %s->%s\n%!" filename_tmp filename;
+      Sys.rename filename_tmp filename;
+      return StatusOK
+    | #Cohttp.Code.redirection_status when recursion_left > 0 ->
+      let new_location = Cohttp.Header.get headers "Location" in
+      ( match new_location with
+        | None ->
+          Printf.eprintf "Location expected in redirect but it was not found; aborting\n";
+          return StatusDownloadError
+        | Some url ->
+          download (Uri.of_string url) (recursion_left - 1) )
+    | #Cohttp.Code.redirection_status ->
+      Printf.eprintf "Redirection recursion status exceeded; aborting download\n";
+      return StatusDownloadError
+    | status ->
+      Printf.eprintf "HTTP error %d\n" (Cohttp.Code.code_of_status status);
+      return StatusDownloadError
   in
-  close_out file;
-  Printf.printf "Renaming %s->%s\n%!" filename_tmp filename;
-  Sys.rename filename_tmp filename;
-  return StatusOK
+  download url 3
+
 
 let cmd_download env =
   let command common cache_server pids format quality =
