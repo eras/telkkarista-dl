@@ -177,6 +177,7 @@ let help_subcommands = [
   `P "2 $(b,Invalid response): $(mname) received an invalid response from the server.";
   `P "3 $(b,Not found): the object (ie. program) could not be found from the server.";
   `P "4 $(b,Invalid parameters): invalid command line parameters were provided to $(mname).";
+  `P "5 $(b,Download error): download while downloading.";
   `S "FILES";
   `P "$(b,~/.config/telkkarista/session) or $(qb,~/.telkkarista/session) contain the current effective configuration.";
   `S "ENVIRONMENT";
