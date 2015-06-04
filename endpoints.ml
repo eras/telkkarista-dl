@@ -1,7 +1,7 @@
 open Batteries
 open Lwt.Infix
 
-let base = "http://api.telkkarista.com"
+let base = "https://api.telkkarista.com"
 
 let return = Lwt.return
 
