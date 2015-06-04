@@ -488,10 +488,10 @@ let cmd_vod_url env =
   let vod_url common pid =
     match%lwt Endpoints.epg_info common.Common.c_session (renegotiate_session common) { API.pid } with
     | Endpoints.Invalid_response ->
-      Printf.eprintf "Invalid response from the server\n";
+      Printf.eprintf "Invalid response from the server for program id %s\n" pid;
       return StatusInvalidResponse
     | Endpoints.Error error ->
-      Printf.eprintf "Sorry, no such programm id could be found: %s\n" error;
+      Printf.eprintf "Program id %s could not be found: %s\n" pid error;
       return StatusNotFound
     | Endpoints.Ok ({ recordpath = Some recordpath }) ->
       let request = {
@@ -502,7 +502,7 @@ let cmd_vod_url env =
       interactive_request common Endpoints.client_vod_getUrl common.Common.c_session request @@
       fun response -> API.show_json_response response
     | Endpoints.Ok _ ->
-      Printf.eprintf "Sorry, no recording for the program id could be found\n";
+      Printf.eprintf "No recording for the program id %s could be found\n" pid;
       return StatusNotFound
   in
   let doc = "NOT WORKING: Retrieve the URL of a program" in
@@ -549,7 +549,7 @@ let cmd_url env =
   let url common cache_server pid format quality =
     match%lwt vod_url common common.Common.c_session cache_server pid format quality with
     | None ->
-      Printf.eprintf "Sorry, no such programm id could be found\n%!";
+      Printf.eprintf "Program id %s could not be found\n" pid;
       return StatusNotFound
     | Some (url, _filename) ->
       Printf.printf "%s\n%!" url;
@@ -640,7 +640,7 @@ let cmd_download env =
     pids |> flip Lwt_list.fold_left_s StatusOK @@ fun prev_status pid ->
     match%lwt vod_url common common.Common.c_session cache_server pid format quality with
     | None ->
-      Printf.eprintf "Sorry, no such programm id could be found\n%!";
+      Printf.eprintf "Program id %s could not be found\n" pid;
       return (match prev_status with
           | StatusOK -> StatusNotFound
           | other -> other)
