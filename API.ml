@@ -23,9 +23,9 @@ type error = [
 ] [@@deriving of_yojson]
 
 type 'a response = {
-  status        : string;
-  code          : string;
-  payload       : 'a option [@default None];
+  status                  : string;
+  method_ [@key "method"] : string;
+  payload                 : 'a option [@default None];
 } [@@deriving of_yojson { strict = false }]
 
 type checkSession_response = {

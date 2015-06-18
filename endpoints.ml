@@ -62,13 +62,11 @@ let retry session0 update_session request =
     let%lwt response = request ~session in
     match response with
     | `Assoc kvs -> (
-        let status = List.assoc "status" kvs in
-        let code = List.assoc "code" kvs in
-        match List.assoc "status" kvs, List.assoc "code" kvs with
-        | `String "error", `String "invalid_session" when retries_left > 0 ->
+        match List.assoc "status" kvs with
+        | `String "error" when retries_left > 0 ->
           let%lwt new_session = update_session () in
           loop (retries_left - 1) new_session
-        | `String "error", `String "invalid_session" ->
+        | `String "error" ->
           Printf.eprintf "Failed to relogin\n%!";
           assert false
         | other -> return response
@@ -96,8 +94,8 @@ let request (type session) (type request_) (type response) uri (request : (sessi
       Printf.eprintf "Failed to convert response due to %s from %s\n%!" error (Yojson.Safe.to_string response);
       return (Error error)
     (* We succeeded in decoding the JSON, but it indicated an error. TODO: better error handling *)
-    | `Ok { API.code = code; payload = None } ->
-      Printf.eprintf "Error %s in %s\n%!" code (Yojson.Safe.to_string response);
+    | `Ok { API.status; payload = None } ->
+      Printf.eprintf "Error %s in %s\n%!" status (Yojson.Safe.to_string response);
       return Invalid_response
     (* Everything's awesome! *)
     | `Ok { API.payload = Some payload } ->
