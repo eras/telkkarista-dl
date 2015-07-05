@@ -28,14 +28,6 @@ type 'a response = {
   payload                 : 'a option [@default None];
 } [@@deriving of_yojson { strict = false }]
 
-type checkSession_response = {
-  _id           : string;
-  user_id       : string;
-  lastActivity  : string;
-  meta          : Tools.json;
-  email         : string;
-} [@@deriving of_yojson { strict = false }]
-
 type email = string [@@deriving to_yojson]
 
 type password = string [@@deriving to_yojson]
@@ -65,6 +57,12 @@ let show_timestamp timestamp =
   Printf.sprintf "%s" (ISO8601.Permissive.string_of_datetimezone (timestamp, -. float (Netdate.get_localzone ()) *. 60.0))
 
 let pp_timestamp fmt timestamp = Format.fprintf fmt "%s" (show_timestamp timestamp)
+
+type checkSession_response = {
+  key           : string;
+  lastActivity  : timestamp;
+  valid_until   : string;       (* seems to be yyyy-mm-dd only.. *)
+} [@@deriving of_yojson { strict = false }]
 
 type range_request = {
   from_ [@key "from"] : timestamp;

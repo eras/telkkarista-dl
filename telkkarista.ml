@@ -194,7 +194,7 @@ let default_prompt env =
 let cmd_checkSession env =
   let checkSession common =
     interactive_request common Endpoints.user_checkSession common.Common.c_session () @@
-    fun response -> response.API._id
+    fun response -> response.API.key
   in
   let doc = "Check session status" in
   Term.(pure checkSession $ common_opts_t env),
