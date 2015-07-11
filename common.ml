@@ -1,5 +1,6 @@
 type environment = {
-  e_persist : Persist.t;         (* for persisting login and session *)
+  e_persist    : Persist.t;     (* for persisting login and session *)
+  e_ep_context : Endpoints.context;
 }
 
 type common = {

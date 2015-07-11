@@ -17,7 +17,7 @@ let renegotiate_session : Common.common -> _ Endpoints.update_session = fun comm
       assert false
     )
   | Some (email, password) -> (fun () ->
-      match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
+      match%lwt Endpoints.user_login () (const (return ())) { API.email; password } env.Common.e_ep_context with
       | Endpoints.Error _ | Endpoints.Invalid_response ->
         Printf.eprintf "Failed to acquire token\n%!";
         assert false
@@ -43,7 +43,7 @@ let returncode_of_status = function
   | StatusDownloadError     -> 5
 
 let interactive_request (common : Common.common) (endpoint : (_, _, _) Endpoints.result) session arg show =
-  let%lwt response = endpoint session (renegotiate_session common) arg in
+  let%lwt response = endpoint session (renegotiate_session common) arg common.c_env.Common.e_ep_context in
   match response with
   | Endpoints.Error error ->
     Printf.eprintf "Error: %s\n%!" error;
@@ -205,7 +205,7 @@ let update_persisted_settings env settings =
 
 let cmd_login env =
   let login common email password =
-    match%lwt Endpoints.user_login () (const (return ())) { API.email; password } with
+    match%lwt Endpoints.user_login () (const (return ())) { API.email; password } env.Common.e_ep_context with
     | Endpoints.Invalid_response ->
       Printf.eprintf "Failed to log in: invalid response\n";
       return StatusInvalidResponse
@@ -216,7 +216,7 @@ let cmd_login env =
       Printf.eprintf "Logged in\n%!";
       Persist.set_email_password env.Common.e_persist email password;
       Persist.set_session env.Common.e_persist token;
-      match%lwt Endpoints.user_settings token (renegotiate_session common) () with
+      match%lwt Endpoints.user_settings token (renegotiate_session common) () env.Common.e_ep_context with
       | Endpoints.Invalid_response ->
         Printf.eprintf "Failed to retrieve settings\n%!";
         return StatusInvalidResponse
@@ -427,7 +427,7 @@ let cmd_list env =
     let%lwt response =
       match load_file, from_, to_ with
       | None, Some from_, Some to_ -> (
-          match%lwt Endpoints.epg_range common.Common.c_session (renegotiate_session common) { API.from_; to_ } with
+          match%lwt Endpoints.epg_range common.Common.c_session (renegotiate_session common) { API.from_; to_ } env.Common.e_ep_context with
           | Endpoints.Invalid_response ->
             Printf.eprintf "Failed to receive response (invalid response)\n%!";
             return None
@@ -484,7 +484,7 @@ let cmd_cache env =
 (* useless currently. what are the parameters to the request? *)
 let cmd_vod_url env =
   let vod_url common pid =
-    match%lwt Endpoints.epg_info common.Common.c_session (renegotiate_session common) { API.pid } with
+    match%lwt Endpoints.epg_info common.Common.c_session (renegotiate_session common) { API.pid } env.Common.e_ep_context with
     | Endpoints.Invalid_response ->
       Printf.eprintf "Invalid response from the server for program id %s\n" pid;
       return StatusInvalidResponse
@@ -508,7 +508,7 @@ let cmd_vod_url env =
   Term.info "vod-url" ~doc
 
 let vod_url common session cache_server pid format quality =
-  match%lwt Endpoints.epg_info session (renegotiate_session common) { API.pid } with
+  match%lwt Endpoints.epg_info session (renegotiate_session common) { API.pid } common.Common.c_env.Common.e_ep_context with
   | Endpoints.Error error ->
     Printf.eprintf "Error: %s\n%!" error;
     return None
@@ -730,7 +730,10 @@ let main () =
     cmd_news_get;
     cmd_payment_getPackages;
   ] in
-  let env = { Common.e_persist = Persist.load_persist () } in
+  let env = {
+    Common.e_persist = Persist.load_persist ();
+    e_ep_context = { Endpoints.c_debug = try Sys.getenv "TELKKARISTA_DEBUG" = "1" with Not_found -> false }
+  } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)
   with
   | `Error _   -> exit (returncode_of_status StatusInvalidParameters)

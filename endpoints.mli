@@ -1,9 +1,9 @@
 type 'session update_session = unit -> 'session Lwt.t
 type 'a value = Ok of 'a | Invalid_response | Error of string
-type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> 'response value Lwt.t
+type context = { c_debug : bool }
+type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> context -> 'response value Lwt.t
     
 val version : int
-val debug : bool
 
 val user_login : (unit, API.login_request, string) result
     

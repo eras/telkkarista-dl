@@ -12,7 +12,8 @@ type 'a of_json_result = [ `Error of string | `Ok of 'a ]
 
 type 'session update_session = unit -> 'session Lwt.t
 type 'a value = Ok of 'a | Invalid_response | Error of string
-type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> 'response value Lwt.t
+type context = { c_debug : bool }
+type ('session, 'request, 'response) result = 'session -> 'session update_session -> 'request -> context -> 'response value Lwt.t
 
 type ('session, 'request, 'response) request =
   (* GetRequest has no parameters, but does have a response, ie. checkSession *)
@@ -32,29 +33,27 @@ let endpoint_uri service = Uri.of_string (base ^/ Printf.sprintf "%d" version ^/
 (* Each request has this header (except PostRequestNoSession) *)
 let session_header session = ["X-SESSION", session]
 
-let debug = try Sys.getenv "TELKKARISTA_DEBUG" = "1" with Not_found -> false
-
 (* Issues a general POST request to the endpoint *)
-let post ~headers ~endpoint ~body =
-  if debug then Printf.eprintf "Requesting: %s\n%!" body;
+let post ~context ~headers ~endpoint ~body =
+  if context.c_debug then Printf.eprintf "Requesting: %s\n%!" body;
   let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
-  if debug then Printf.eprintf "Response: %s\n%!" body_string;
+  if context.c_debug then Printf.eprintf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
 
 (* Issues a POST request with session id to the endpoint *)
-let post_with_session ~session ~endpoint ~body = post ~headers:(session_header session) ~endpoint ~body
+let post_with_session ~context ~session ~endpoint ~body = post ~context ~headers:(session_header session) ~endpoint ~body
 
 (* Issues a POST request without session id to the endpoint *)
-let post_without_session ~endpoint ~body = post ~headers:[] ~endpoint ~body
+let post_without_session ~context ~endpoint ~body = post ~context ~headers:[] ~endpoint ~body
 
 (* Issues a GET request with session id to the endpoint *)
-let get ~session ~endpoint =
+let get ~context ~session ~endpoint =
   let headers = Cohttp.Header.of_list (session_header session) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
-  if debug then Printf.eprintf "Response: %s\n%!" body_string;
+  if context.c_debug then Printf.eprintf "Response: %s\n%!" body_string;
   return (Yojson.Safe.from_string body_string)
 
 let retry session0 update_session request =
@@ -102,14 +101,14 @@ let request (type session) (type request_) (type response) uri (request : (sessi
       return (Ok payload)
   in
   match request with
-  | GetRequest json_to_response -> fun session update_session _ ->
-    retry session update_session (get ~endpoint:uri) >>= handle_response json_to_response
-  | PostRequestNoSession (request_to_json, json_to_response) -> fun _session _update_session arg ->
+  | GetRequest json_to_response -> fun session update_session _ context ->
+    retry session update_session (get ~context ~endpoint:uri) >>= handle_response json_to_response
+  | PostRequestNoSession (request_to_json, json_to_response) -> fun _session _update_session arg context ->
     let body = Yojson.Safe.to_string (request_to_json arg) in
-    post_without_session ~endpoint:uri ~body >>= handle_response json_to_response
-  | PostRequest (request_to_json, json_to_response) -> fun session update_session arg ->
+    post_without_session ~context ~endpoint:uri ~body >>= handle_response json_to_response
+  | PostRequest (request_to_json, json_to_response) -> fun session update_session arg context ->
     let body = Yojson.Safe.to_string (request_to_json arg) in
-    retry session update_session (post_with_session ~endpoint:uri ~body) >>= handle_response json_to_response
+    retry session update_session (post_with_session ~context ~endpoint:uri ~body) >>= handle_response json_to_response
 
 (* let's consider this a special case for how *)
 let user_login =
