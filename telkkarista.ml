@@ -697,6 +697,16 @@ let cmd_news_get env =
   Term.(pure news_get $ common_opts_t env),
   Term.info "news" ~doc
 
+let cmd_payment_getPackages env =
+  let payment_getPackages common =
+    interactive_request common Endpoints.payment_getPackages common.Common.c_session () @@
+    fun response ->
+    Yojson.Safe.pretty_to_string response
+  in
+  let doc = "List available payment packages" in
+  Term.(pure payment_getPackages $ common_opts_t env),
+  Term.info "payment-packages" ~doc
+
 let main () =
   let subcommands = [
     cmd_checkSession;
@@ -710,6 +720,7 @@ let main () =
     cmd_url;
     cmd_download;
     cmd_news_get;
+    cmd_payment_getPackages;
   ] in
   let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)

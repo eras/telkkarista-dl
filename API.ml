@@ -206,3 +206,5 @@ type news = {
 type news_get_response = news list [@@deriving show, of_yojson]
 
 type epg_titles_response = language_titles list [@@deriving show, of_yojson]
+
+type payment_getPackages_response = Tools.json [@@deriving show, of_yojson]

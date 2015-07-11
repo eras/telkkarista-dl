@@ -24,3 +24,5 @@ val user_settings : (API.session_token, unit, API.user_settings_response) result
 val download_url : string -> API.session_token -> string -> API.quality -> API.vod -> string -> string option
     
 val news_get : (API.session_token, unit, API.news_get_response) result
+
+val payment_getPackages : (API.session_token, unit, API.payment_getPackages_response) result

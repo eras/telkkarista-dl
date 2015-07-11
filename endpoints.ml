@@ -172,3 +172,8 @@ let news_get =
   request
     (endpoint_uri "news/get")
     (GetRequest (API.news_get_response_of_yojson))
+
+let payment_getPackages =
+  request
+    (endpoint_uri "payment/getPackages")
+    (GetRequest (API.payment_getPackages_response_of_yojson))
