@@ -273,7 +273,7 @@ let preferred_title_for language_preference titles =
   | (_, preferred)::_ -> Some preferred
   | [] -> None
 
-let title_for vod = preferred_title_for language_preference vod.API.title
+let title_for (vod : API.vod) = preferred_title_for language_preference vod.API.title
 
 let subtitle_for vod =
   let subtitles = vod.API.subtitle in
@@ -683,7 +683,15 @@ let cmd_news_get env =
   let news_get common =
     interactive_request common Endpoints.news_get common.Common.c_session () @@
     fun response ->
-    Yojson.Safe.pretty_to_string response
+    response |>
+    (List.map @@ fun { API.title; date; author; content } ->
+     Printf.sprintf "%s (by %s at %s):\n  %s\n\n"
+       title
+       author
+       (ISO8601.Permissive.string_of_datetime date)
+       content
+    )
+    |> String.concat ""
   in
   let doc = "List news" in
   Term.(pure news_get $ common_opts_t env),
