@@ -161,3 +161,9 @@ let user_settings =
   request
     (endpoint_uri "user/settings")
     (GetRequest (API.user_settings_response_of_yojson))
+
+
+let news_get =
+  request
+    (endpoint_uri "news/get")
+    (GetRequest (API.news_get_response_of_yojson))

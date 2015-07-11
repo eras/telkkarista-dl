@@ -664,6 +664,16 @@ let cmd_epg_info env =
   Term.(pure epg_info $ common_opts_t env $ pid_t),
   Term.info "info" ~doc
 
+let cmd_news_get env =
+  let news_get common =
+    interactive_request common Endpoints.news_get common.Common.c_session () @@
+    fun response ->
+    Yojson.Safe.pretty_to_string response
+  in
+  let doc = "List news" in
+  Term.(pure news_get $ common_opts_t env),
+  Term.info "news" ~doc
+
 let main () =
   let subcommands = [
     cmd_checkSession;
@@ -675,6 +685,7 @@ let main () =
     cmd_vod_url;
     cmd_url;
     cmd_download;
+    cmd_news_get;
   ] in
   let env = { Common.e_persist = Persist.load_persist () } in
   match Term.eval_choice (default_prompt env) (List.map (fun x -> x env) subcommands)

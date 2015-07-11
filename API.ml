@@ -195,3 +195,5 @@ let speedtests_of_yojson = Tools.assoc_of_yojson speedtest_of_yojson "API.speedt
 type user_settings_response = {
   speedtests : speedtests;
 } [@@deriving show, of_yojson { strict = false }]
+
+type news_get_response = Tools.json [@@deriving show, of_yojson]
