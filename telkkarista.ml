@@ -201,11 +201,7 @@ let cmd_checkSession env =
   Term.info "checkSession" ~doc
 
 let update_persisted_settings env settings =
-  List.iter
-    (function
-      | API.Speedtests speedtests -> Persist.set_cache_servers env.Common.e_persist speedtests
-      | Other _ -> ())
-    settings
+  Persist.set_cache_servers env.Common.e_persist settings.API.speedtests
 
 let cmd_login env =
   let login common email password =

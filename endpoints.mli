@@ -17,7 +17,7 @@ val client_vod_getUrl : (API.session_token, API.client_vod_getUrl_request, Yojso
     
 val epg_info : (API.session_token, API.epg_info_request, API.vod) result
     
-val user_settings : (API.session_token, unit, API.user_setting list) result
+val user_settings : (API.session_token, unit, API.user_settings_response) result
 
 val download_url : string -> API.session_token -> string -> API.quality -> API.vod -> string -> string option
     
