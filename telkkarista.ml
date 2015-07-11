@@ -636,27 +636,26 @@ let download_url url filename =
 let cmd_download env =
   let command common cache_server pids format quality =
     pids |> flip Lwt_list.fold_left_s StatusOK @@ fun prev_status pid ->
-    match%lwt vod_url common common.Common.c_session cache_server pid format quality with
-    | None ->
-      Printf.eprintf "Program id %s could not be found\n" pid;
-      return (match prev_status with
-          | StatusOK -> StatusNotFound
-          | other -> other)
-    | Some (url, name) ->
-      Printf.printf "%s\n%!" url;
-      Lwt.catch (fun () ->
+    Lwt.catch (fun () ->
+        match%lwt vod_url common common.Common.c_session cache_server pid format quality with
+        | None ->
+          Printf.eprintf "Program id %s could not be found\n" pid;
+          return (match prev_status with
+              | StatusOK -> StatusNotFound
+              | other -> other)
+        | Some (url, name) ->
+          Printf.printf "%s\n%!" url;
           let%lwt new_status = download_url (Uri.of_string url) name in
           return (match prev_status with
               | StatusOK -> new_status
               | other -> other)
-        ) (function
-          | exn ->
-            Printf.eprintf "Uh Oh, failed while downloading pid %s (%s):(: %s\n%!"
-              pid
-              name
-              (Printexc.to_string exn);
-            Lwt.fail exn
-        )
+      ) (function
+        | exn ->
+          Printf.eprintf "Uh Oh, failed while downloading pid %s:(: %s\n%!"
+            pid
+            (Printexc.to_string exn);
+          Lwt.fail exn
+      )
   in
   let doc = "Retrieve a program" in
   Term.(pure command $ common_opts_t env $ cache_server_t env.Common.e_persist $ pids_t $ format_t $ quality_t),
