@@ -644,10 +644,19 @@ let cmd_download env =
           | other -> other)
     | Some (url, name) ->
       Printf.printf "%s\n%!" url;
-      let%lwt new_status = download_url (Uri.of_string url) name in
-      return (match prev_status with
-          | StatusOK -> new_status
-          | other -> other)
+      Lwt.catch (fun () ->
+          let%lwt new_status = download_url (Uri.of_string url) name in
+          return (match prev_status with
+              | StatusOK -> new_status
+              | other -> other)
+        ) (function
+          | exn ->
+            Printf.eprintf "Uh Oh, failed while downloading pid %s (%s):(: %s\n%!"
+              pid
+              name
+              (Printexc.to_string exn);
+            Lwt.fail exn
+        )
   in
   let doc = "Retrieve a program" in
   Term.(pure command $ common_opts_t env $ cache_server_t env.Common.e_persist $ pids_t $ format_t $ quality_t),
