@@ -157,6 +157,11 @@ let epg_info =
     (PostRequest (API.epg_info_request_to_yojson,
                   API.epg_info_response_of_yojson))
 
+let epg_titles =
+  request
+    (endpoint_uri "epg/titles")
+    (GetRequest (API.epg_titles_response_of_yojson))
+
 let user_settings =
   request
     (endpoint_uri "user/settings")

@@ -16,6 +16,8 @@ val cache_get : (API.session_token, unit, API.cache list) result
 val client_vod_getUrl : (API.session_token, API.client_vod_getUrl_request, Yojson.Safe.json) result
     
 val epg_info : (API.session_token, API.epg_info_request, API.vod) result
+
+val epg_titles : (API.session_token, unit, API.epg_titles_response) result
     
 val user_settings : (API.session_token, unit, API.user_settings_response) result
 

@@ -197,3 +197,5 @@ type user_settings_response = {
 } [@@deriving show, of_yojson { strict = false }]
 
 type news_get_response = Tools.json [@@deriving show, of_yojson]
+
+type epg_titles_response = language_titles list [@@deriving show, of_yojson]

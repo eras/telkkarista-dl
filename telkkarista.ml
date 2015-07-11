@@ -268,11 +268,12 @@ let index_of xs x =
   try fst @@ List.findi (fun _ y -> x = y) xs
   with Not_found -> List.length xs
 
-let title_for vod =
-  let titles = vod.API.title in
+let preferred_title_for language_preference titles =
   match List.sort (compare_by (index_of language_preference % fst)) titles with
   | (_, preferred)::_ -> Some preferred
   | [] -> None
+
+let title_for vod = preferred_title_for language_preference vod.API.title
 
 let subtitle_for vod =
   let subtitles = vod.API.subtitle in
@@ -664,6 +665,20 @@ let cmd_epg_info env =
   Term.(pure epg_info $ common_opts_t env $ pid_t),
   Term.info "info" ~doc
 
+let cmd_epg_titles env =
+  let epg_titles common =
+    interactive_request common Endpoints.epg_titles common.Common.c_session () @@
+    fun response ->
+    response
+    |> List.filter_map (preferred_title_for language_preference)
+    |> List.map (fun s -> s ^ "\n")
+    |> List.sort compare
+    |> String.concat ""
+  in
+  let doc = "List EPG titles" in
+  Term.(pure epg_titles $ common_opts_t env),
+  Term.info "list-titles" ~doc
+
 let cmd_news_get env =
   let news_get common =
     interactive_request common Endpoints.news_get common.Common.c_session () @@
@@ -682,6 +697,7 @@ let main () =
     cmd_list;
     cmd_cache;
     cmd_epg_info;
+    cmd_epg_titles;
     cmd_vod_url;
     cmd_url;
     cmd_download;
