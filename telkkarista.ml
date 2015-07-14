@@ -33,14 +33,18 @@ type status =
   | StatusNotFound
   | StatusInvalidParameters
   | StatusDownloadError
+  | StatusNoCaches
+  | StatusIncompleteDownload
 
 let returncode_of_status = function
-  | StatusOK                -> 0
-  | StatusEndpointError _   -> 1
-  | StatusInvalidResponse   -> 2
-  | StatusNotFound          -> 3
-  | StatusInvalidParameters -> 4
-  | StatusDownloadError     -> 5
+  | StatusOK                 -> 0
+  | StatusEndpointError _    -> 1
+  | StatusInvalidResponse    -> 2
+  | StatusNotFound           -> 3
+  | StatusInvalidParameters  -> 4
+  | StatusDownloadError      -> 5
+  | StatusNoCaches           -> 6
+  | StatusIncompleteDownload -> 7
 
 let interactive_request (common : Common.common) (endpoint : (_, _, _) Endpoints.result) session arg show =
   let%lwt response = endpoint session (renegotiate_session common) arg common.c_env.Common.e_ep_context in
@@ -97,12 +101,14 @@ let quality_t =
   let doc = "Quality for download." in
   Arg.(value & opt (some string) None & (Arg.info ["q"; "quality"] ~docv:"QUALITY" ~doc))
 
+let best_caches persist =
+  Persist.get_cache_servers persist |>
+  List.sort (fun (_, a) (_, b) -> compare b.API.mbit a.API.mbit) |>
+  List.map fst
+
 let best_cache persist =
-  match
-    Persist.get_cache_servers persist |>
-    List.sort (fun (_, a) (_, b) -> compare b.API.mbit a.API.mbit)
-  with
-  | (fastest, _)::_ -> Some fastest
+  match best_caches persist with
+  | fastest::_ -> Some fastest
   | _ -> None
 
 let cache_server_t persist =
@@ -557,98 +563,233 @@ let cmd_url env =
   Term.(pure url $ common_opts_t env $ cache_server_t env.Common.e_persist $ pid_t $ format_t $ quality_t),
   Term.info "url" ~doc
 
-let download_url url filename =
-  let rec download url recursion_left =
-    let filename_tmp = filename ^ ".partial" in
-    let headers = Cohttp.Header.of_list [] in
-    let%lwt (response, body) = Cohttp_lwt_unix.Client.get ~headers url in
-    let headers = response.headers in
-    match response.status with
-    | `OK ->
-      let total_length = Option.map Int64.of_string @@ Cohttp.Header.get headers "Content-Length" in
-      let stream = Cohttp_lwt_body.to_stream body in
-      Printf.printf "Saving %s to %s\n%!" (Uri.to_string url) filename_tmp;
-      let file = open_out filename_tmp in
-      let window_bytes = 1000000L in
-      let%lwt _ = Lwt_stream.fold_s (
-          fun str (received_bytes, queue) ->
-            let (queue, speed) =
-              match Deque.front queue, Deque.rear queue with
-              | Some ((oldest_bytes, oldest_time), rest), Some (_, (latest_bytes, latest_time)) ->
-                let delta_bytes = Int64.sub latest_bytes oldest_bytes in
-                let delta_time = latest_time -. oldest_time in
-                (* slightly broken if we receive window size blocks.. *)
-                ((if delta_bytes > Int64.(window_bytes * 2L) then rest else queue),
-                 (if delta_bytes > window_bytes then Some (Int64.to_float delta_bytes /. delta_time)
-                  else None))
-              | _ -> (queue, None)
-            in
-            let bytes = String.length str in
-            let received_bytes = Int64.(add received_bytes (of_int bytes)) in
-            let bytes_left =
-              match total_length with
-              | None -> None
-              | Some total_length -> Some (Int64.sub total_length received_bytes)
-            in
-            let seconds_left =
-              match bytes_left, speed with
-              | Some bytes_left, Some speed -> Some (Int64.to_float bytes_left /. speed)
-              | _ -> None
-            in
-            let eta =
-              seconds_left |> Option.map @@ fun seconds ->
-              "ETA: " ^ ISO8601.Permissive.string_of_datetimezone (Unix.gettimeofday () +. seconds, ~-.(float (Netdate.get_localzone ())) *. 60.0)
-            in
-            Printf.printf "%Ld/%s %s %s   \r%!"
-              received_bytes
-              (match total_length with None -> "unknown" | Some b -> Int64.to_string b)
-              (match speed with
-               | None -> ""
-               | Some speed -> Printf.sprintf "%.0f kB/s" (speed /. 1000.0))
-              (Option.default "" eta);
-            output_string file str;
-            let queue = Deque.snoc queue (received_bytes, Unix.gettimeofday ()) in
-            return (received_bytes, queue)
-        ) stream (0L, Deque.empty)
-      in
-      close_out file;
-      Printf.printf "Renaming %s->%s\n%!" filename_tmp filename;
-      Sys.rename filename_tmp filename;
-      return StatusOK
-    | #Cohttp.Code.redirection_status when recursion_left > 0 ->
-      let new_location = Cohttp.Header.get headers "Location" in
-      ( match new_location with
-        | None ->
-          Printf.eprintf "Location expected in redirect but it was not found; aborting\n";
-          return StatusDownloadError
-        | Some url ->
-          download (Uri.of_string url) (recursion_left - 1) )
-    | #Cohttp.Code.redirection_status ->
-      Printf.eprintf "Redirection recursion status exceeded; aborting download\n";
-      return StatusDownloadError
-    | status ->
-      Printf.eprintf "HTTP error %d\n" (Cohttp.Code.code_of_status status);
-      return StatusDownloadError
-  in
-  download url 3
+(* given a stream, truncate the stream if reading from it causes an exception *)
+let filter_stream_exceptions stream =
+  Lwt_stream.from @@ fun () ->
+  Lwt.catch
+    (fun () -> Lwt_stream.get stream)
+    (function
+      | exn -> return None)
 
+let range_info headers =
+  let total_length = Option.map Int64.of_string @@ Cohttp.Header.get headers "Content-Length" in
+  let accept_ranges = Cohttp.Header.get headers "Accept-Ranges" = Some "bytes" && total_length <> None in
+  (total_length, accept_ranges)
+
+let list_of_option = function
+  | None -> []
+  | Some x -> [x]
+
+let download_url url filename =
+  let rec download content_length url recursion_left retries_left =
+    let filename_tmp = filename ^ ".partial" in
+    let final_rename () =
+      Printf.printf "Renaming %s->%s\n%!" filename_tmp filename;
+      Sys.rename filename_tmp filename
+    in
+    let current_offset =
+      try (Unix.LargeFile.stat filename_tmp).Unix.LargeFile.st_size
+      with Unix.Unix_error _ -> 0L
+    in
+    let%lwt (range_header, content_length) =
+      match current_offset with
+      | 0L ->
+        return (None, content_length)
+      | current_offset ->
+        let%lwt content_length =
+          match content_length with
+          | Some _ -> return content_length
+          | None ->
+            let rec acquire_headers url recursion_left =
+              let%lwt response =
+                Lwt.catch (fun () ->
+                    let%lwt response = Cohttp_lwt_unix.Client.head url in
+                    return (`Ok response)
+                  ) (fun exn -> return (`Exn exn))
+              in
+              match response with
+              | `Exn exn ->
+                Printf.eprintf "Failed to HEAD %s: %s\n%!" (Uri.to_string url) (Printexc.to_string exn);
+                return None
+              | `Ok response -> (
+                match response.status with
+                | `OK -> (
+                    match range_info response.headers with
+                    | (Some total_length, true) -> return (Some total_length)
+                    | (None, true)
+                    | (_, false) -> return None
+                  )
+                | #Cohttp.Code.redirection_status when recursion_left > 0 -> (
+                    let new_location = Cohttp.Header.get response.headers "Location" in
+                    match new_location with
+                    | None ->
+                      Printf.eprintf "Location expected in redirect but it was not found; aborting\n";
+                      return None
+                    | Some url ->
+                      acquire_headers (Uri.of_string url) (recursion_left - 1)
+                  )
+                | status ->
+                  Printf.eprintf "HTTP error %d while retrieving headers\n" (Cohttp.Code.code_of_status status);
+                  return None
+                )
+            in
+            acquire_headers url 3
+        in
+        match content_length with
+        | None -> return (None, None)
+        | Some content_length ->
+          return (Some ("Range", Printf.sprintf "bytes=%Ld-%Ld" current_offset content_length),
+                  Some content_length)
+    in
+    if content_length = Some current_offset then (
+      Printf.eprintf "File has already been downloaded\n%!";
+      final_rename ();
+      return StatusOK;
+    ) else
+      let headers = List.concat [list_of_option range_header] |> Cohttp.Header.of_list in
+      Lwt.catch (fun () ->
+          let%lwt (response, body) = Cohttp_lwt_unix.Client.get ~headers url in
+          let headers = response.headers in
+          match response.status with
+          | `OK | `Partial_content ->
+            let (total_length, accept_ranges) = range_info headers in
+            (* total_length won't include the part we're skipping *)
+            let total_length = Option.map (Int64.add current_offset) total_length in
+            let stream = filter_stream_exceptions (Cohttp_lwt_body.to_stream body) in
+            Printf.printf "Saving %s to %s\n%!" (Uri.to_string url) filename_tmp;
+            let file =
+              match range_header with
+              | None -> open_out filename_tmp
+              | Some _ -> open_out_gen [Open_wronly; Open_append] 0o600 filename_tmp
+            in
+            let window_bytes = 1000000L in
+            let%lwt (received_bytes, _) = Lwt_stream.fold_s (
+                fun str (received_bytes, queue) ->
+                  let (queue, speed) =
+                    match Deque.front queue, Deque.rear queue with
+                    | Some ((oldest_bytes, oldest_time), rest), Some (_, (latest_bytes, latest_time)) ->
+                      let delta_bytes = Int64.sub latest_bytes oldest_bytes in
+                      let delta_time = latest_time -. oldest_time in
+                      (* slightly broken if we receive window size blocks.. *)
+                      ((if delta_bytes > Int64.(window_bytes * 2L) then rest else queue),
+                       (if delta_bytes > window_bytes then Some (Int64.to_float delta_bytes /. delta_time)
+                        else None))
+                    | _ -> (queue, None)
+                  in
+                  let bytes = String.length str in
+                  let received_bytes = Int64.(add received_bytes (of_int bytes)) in
+                  let bytes_left =
+                    match total_length with
+                    | None -> None
+                    | Some total_length -> Some (Int64.sub total_length received_bytes)
+                  in
+                  let seconds_left =
+                    match bytes_left, speed with
+                    | Some bytes_left, Some speed -> Some (Int64.to_float bytes_left /. speed)
+                    | _ -> None
+                  in
+                  let eta =
+                    seconds_left |> Option.map @@ fun seconds ->
+                    "ETA: " ^ ISO8601.Permissive.string_of_datetimezone (Unix.gettimeofday () +. seconds, ~-.(float (Netdate.get_localzone ())) *. 60.0)
+                  in
+                  Printf.printf "%Ld/%s %s %s   \r%!"
+                    received_bytes
+                    (match total_length with None -> "unknown" | Some b -> Int64.to_string b)
+                    (match speed with
+                     | None -> ""
+                     | Some speed -> Printf.sprintf "%.0f kB/s" (speed /. 1000.0))
+                    (Option.default "" eta);
+                  output_string file str;
+                  let queue = Deque.snoc queue (received_bytes, Unix.gettimeofday ()) in
+                  return (received_bytes, queue)
+              ) stream (current_offset, Deque.empty)
+            in
+            close_out file;
+            if total_length <> None && Some received_bytes <> total_length then (
+              if accept_ranges && retries_left > 0 then (
+                Printf.eprintf "Incomplete download (received %Ld of %Ld); retrying download\n%!" received_bytes (Option.get total_length);
+                download total_length url recursion_left (retries_left - 1)
+              ) else (
+                Printf.eprintf "Incomplete download (received %Ld of %Ld); aborting download\n%!" received_bytes (Option.get total_length);
+                return StatusIncompleteDownload
+              )
+            ) else (
+              final_rename ();
+              return StatusOK
+            )
+          | #Cohttp.Code.redirection_status when recursion_left > 0 ->
+            let new_location = Cohttp.Header.get headers "Location" in
+            ( match new_location with
+              | None ->
+                Printf.eprintf "Location expected in redirect but it was not found; aborting\n";
+                return StatusDownloadError
+              | Some url ->
+                download content_length (Uri.of_string url) (recursion_left - 1) retries_left )
+          | #Cohttp.Code.redirection_status ->
+            Printf.eprintf "Redirection recursion limit exceeded; aborting download\n";
+            return StatusDownloadError
+          | status ->
+            Printf.eprintf "HTTP error %d\n" (Cohttp.Code.code_of_status status);
+            return StatusDownloadError
+        ) (function
+          | exn ->
+            Printf.eprintf "Exception %s while trying to retrieve URL; abort download\n%!"
+              (Printexc.to_string exn);
+            return StatusDownloadError
+        )
+  in
+  if Sys.file_exists filename then (
+    Printf.eprintf "Destination file already exists; skipping download with success\n%!";
+    return StatusOK
+  ) else
+    download None url 3 5
+
+let download_vod_from_all_caches common cache_server pid format quality =
+  let rec loop caches error_code =
+    match caches, error_code with
+    | [], None ->
+      return StatusNoCaches
+    | [], Some error ->
+      return error
+    | cache_server::remaining_caches, _ ->
+      match%lwt vod_url common common.Common.c_session cache_server pid format quality with
+      | None ->
+        Printf.eprintf "Program id %s could not be found\n" pid;
+        loop remaining_caches (Some StatusNotFound)
+      | Some (url, name) ->
+        Printf.printf "%s\n%!" url;
+        let%lwt new_status = download_url (Uri.of_string url) name in
+        match new_status with
+        | StatusOK ->
+          return new_status
+        | StatusEndpointError _
+        | StatusInvalidResponse
+        | StatusNotFound
+        | StatusInvalidParameters
+        | StatusDownloadError
+        | StatusIncompleteDownload ->
+          loop remaining_caches (Some new_status)
+        | StatusNoCaches -> assert false
+  in
+  let caches =
+    best_caches common.Common.c_env.Common.e_persist
+    |> List.filter ( (<>) cache_server )
+    |> fun xs -> cache_server::xs
+  in
+  loop caches None
 
 let cmd_download env =
+  let combine_status prev_status new_status =
+    match prev_status with
+    | StatusOK -> new_status
+    | other -> other
+  in
   let command common cache_server pids format quality =
     pids |> flip Lwt_list.fold_left_s StatusOK @@ fun prev_status pid ->
     Lwt.catch (fun () ->
-        match%lwt vod_url common common.Common.c_session cache_server pid format quality with
-        | None ->
-          Printf.eprintf "Program id %s could not be found\n" pid;
-          return (match prev_status with
-              | StatusOK -> StatusNotFound
-              | other -> other)
-        | Some (url, name) ->
-          Printf.printf "%s\n%!" url;
-          let%lwt new_status = download_url (Uri.of_string url) name in
-          return (match prev_status with
-              | StatusOK -> new_status
-              | other -> other)
+        match%lwt download_vod_from_all_caches common  cache_server pid format quality with
+        | StatusNotFound as new_status -> return (combine_status prev_status new_status)
+        | new_status -> return (combine_status prev_status new_status)
       ) (function
         | exn ->
           Printf.eprintf "Uh Oh, failed while downloading pid %s:(: %s\n%!"
