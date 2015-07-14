@@ -36,7 +36,7 @@ let session_header session = ["X-SESSION", session]
 (* Issues a general POST request to the endpoint *)
 let post ~context ~headers ~endpoint ~body =
   if context.c_debug then Printf.eprintf "Requesting: %s\n%!" body;
-  let headers = Cohttp.Header.of_list (("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
+  let headers = Cohttp.Header.of_list (User_agent.header::("Content-Length", Printf.sprintf "%d" (String.length body))::headers) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.post ~body:(`Stream (Lwt_stream.of_list [body])) ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
   if context.c_debug then Printf.eprintf "Response: %s\n%!" body_string;
@@ -50,7 +50,7 @@ let post_without_session ~context ~endpoint ~body = post ~context ~headers:[] ~e
 
 (* Issues a GET request with session id to the endpoint *)
 let get ~context ~session ~endpoint =
-  let headers = Cohttp.Header.of_list (session_header session) in
+  let headers = Cohttp.Header.of_list (User_agent.header::session_header session) in
   let%lwt (_, body) = Cohttp_lwt_unix.Client.get ~headers endpoint in
   let%lwt body_string = Cohttp_lwt_body.to_string body in
   if context.c_debug then Printf.eprintf "Response: %s\n%!" body_string;

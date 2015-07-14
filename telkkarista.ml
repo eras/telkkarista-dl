@@ -646,7 +646,7 @@ let download_url url filename =
       final_rename ();
       return StatusOK;
     ) else
-      let headers = List.concat [list_of_option range_header] |> Cohttp.Header.of_list in
+      let headers = List.concat [list_of_option range_header; [User_agent.header]] |> Cohttp.Header.of_list in
       Lwt.catch (fun () ->
           let%lwt (response, body) = Cohttp_lwt_unix.Client.get ~headers url in
           let headers = response.headers in
