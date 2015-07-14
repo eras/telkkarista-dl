@@ -785,6 +785,7 @@ let cmd_download env =
     | other -> other
   in
   let command common cache_server pids format quality =
+    let%lwt _ = renegotiate_session common () in
     pids |> flip Lwt_list.fold_left_s StatusOK @@ fun prev_status pid ->
     Lwt.catch (fun () ->
         match%lwt download_vod_from_all_caches common  cache_server pid format quality with
