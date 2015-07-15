@@ -22,6 +22,7 @@ let renegotiate_session : Common.common -> _ Endpoints.update_session = fun comm
         Printf.eprintf "Failed to acquire token\n%!";
         assert false
       | Endpoints.Ok token ->
+        common.Common.c_session <- token;
         Persist.set_session env.Common.e_persist token;
         return token
     )
