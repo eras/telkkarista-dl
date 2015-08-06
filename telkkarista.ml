@@ -805,15 +805,21 @@ let cmd_download env =
   Term.info "download" ~doc
 
 let cmd_epg_info env =
-  let epg_info common pid =
+  let epg_info common pid save_file =
     let request = {
       API.pid = pid;
     } in
     interactive_request common Endpoints.epg_info common.Common.c_session request @@
-    fun r -> API.epg_info_response_to_yojson r |> Yojson.Safe.pretty_to_string
+    fun r ->
+    let json = API.epg_info_response_to_yojson r in
+    let display = json |> Yojson.Safe.pretty_to_string in
+    ( match save_file with
+      | None -> ()
+      | Some file -> File.with_file_out file @@ fun io -> Printf.fprintf io "%s" (Yojson.Safe.to_string json) );
+    display
   in
   let doc = "Retrieve info about a program" in
-  Term.(pure epg_info $ common_opts_t env $ pid_t),
+  Term.(pure epg_info $ common_opts_t env $ pid_t $ save_file_t),
   Term.info "info" ~doc
 
 let cmd_epg_titles env =
