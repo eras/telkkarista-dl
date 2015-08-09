@@ -59,9 +59,8 @@ let show_timestamp timestamp =
 let pp_timestamp fmt timestamp = Format.fprintf fmt "%s" (show_timestamp timestamp)
 
 type checkSession_response = {
-  key           : string;
   lastActivity  : timestamp;
-  valid_until   : string;       (* seems to be yyyy-mm-dd only.. *)
+  validUntil    : string;       (* seems to be base-10 yyyymmdd converted to base-16 *)
 } [@@deriving of_yojson { strict = false }]
 
 type range_request = {
