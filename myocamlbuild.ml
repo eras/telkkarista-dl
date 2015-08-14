@@ -23,6 +23,8 @@ let version_content () =
 
 let () =
   dispatch begin function
+  | Before_options ->
+     Options.use_ocamlfind := true
   | After_options ->
      rule "Version file" ~prods:[version_file] (fun env _ -> Echo ([version_content ()], version_file));
   | _ -> ()
