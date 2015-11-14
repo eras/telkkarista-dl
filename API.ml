@@ -101,6 +101,7 @@ type record_state = [
   | `Recorded
   | `Broken
   | `Panic
+  | `Remuxed
   | `None
 ] [@@deriving show]
 
@@ -111,6 +112,7 @@ let record_state_of_yojson = function
   | `String "recorded" -> `Ok `Recorded
   | `String "broken" -> `Ok `Broken
   | `String "panic" -> `Ok `Panic
+  | `String "remuxed" -> `Ok `Remuxed
   | `String state -> `Error ("API.record_state(" ^ state ^ ")")
   | _ -> `Error ("API.record_state not string")
 
@@ -121,6 +123,7 @@ let record_state_to_yojson = function
   | `Recorded -> `String "recorded"
   | `Broken -> `String "broken"
   | `Panic -> `String "panic"
+  | `Remuxed -> `String "remuxed"
   | `None -> `String "none"
 
 type vod = {
